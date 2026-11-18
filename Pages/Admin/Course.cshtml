@@ -1,0 +1,104 @@
+@page
+@model AcademyNet.Pages.Admin.CourseModel
+@{
+    var c = Model.Course;
+    ViewData["Title"] = "Edit · " + c.Title;
+}
+<section class="page-head left">
+    <div class="wrap">
+        <span class="eyebrow">Admin · Course</span>
+        <h1>@c.Title</h1>
+        <partial name="_AdminNav" />
+    </div>
+</section>
+
+<section class="section tight">
+    <div class="wrap">
+        <div class="card">
+            <div class="head-row"><h3>Course details</h3><a class="btn btn-sm btn-ghost" href="/Courses/@c.Slug" target="_blank">View page ↗</a></div>
+            <form method="post" asp-page-handler="Save" asp-route-id="@c.Id" class="form form-grid">
+                <label class="full-row">Title <input asp-for="Input.Title" required /></label>
+                <label>URL slug <input asp-for="Input.Slug" /></label>
+                <label>Type
+                    <select asp-for="Input.Mode" asp-items="Html.GetEnumSelectList<CourseMode>()"></select>
+                </label>
+                <label class="full-row">Subtitle <input asp-for="Input.Subtitle" /></label>
+                <label class="full-row">Description <textarea asp-for="Input.Description" rows="5"></textarea></label>
+                <label class="full-row">Highlights (one per line) <textarea asp-for="Input.Highlights" rows="5"></textarea></label>
+                <label>Price (₹) <input asp-for="Input.PriceInr" type="number" min="0" /></label>
+                <label>Original price / MRP (₹) <input asp-for="Input.MrpInr" type="number" min="0" /></label>
+                <label>Badge (optional) <input asp-for="Input.Badge" placeholder="Most popular" /></label>
+                <label>Start date <input asp-for="Input.StartDate" type="date" /></label>
+                <label>Schedule <input asp-for="Input.Schedule" placeholder="Sat & Sun · 8–10:30 PM IST" /></label>
+                <label>Hours <input asp-for="Input.Hours" type="number" min="0" /></label>
+                <label>Projects <input asp-for="Input.Projects" type="number" min="0" /></label>
+                <label>Sort order <input asp-for="Input.SortOrder" type="number" /></label>
+                <label class="check full-row"><input asp-for="Input.IsPublished" /> Published (visible on the website)</label>
+                <div class="full-row"><button class="btn">Save course</button></div>
+            </form>
+        </div>
+
+        <h2 class="h-sm" style="margin-top:36px">Modules &amp; lessons</h2>
+        @foreach (var m in c.Modules)
+        {
+            <div class="card chapter">
+                <div class="chapter-head">
+                    <h3>📁 @m.Title</h3>
+                    <div class="row-actions">
+                        <details class="menu">
+                            <summary class="icon-btn">⋯</summary>
+                            <div class="menu-panel card">
+                                <form method="post" asp-page-handler="EditModule" asp-route-id="@c.Id" class="form">
+                                    <input type="hidden" name="moduleId" value="@m.Id" />
+                                    <label>Title <input name="title" value="@m.Title" /></label>
+                                    <label>Order <input name="sortOrder" type="number" value="@m.SortOrder" /></label>
+                                    <button class="btn btn-sm">Save</button>
+                                </form>
+                                <form method="post" asp-page-handler="DeleteModule" asp-route-id="@c.Id" data-confirm="Delete this module and all its lessons?" style="margin-top:10px">
+                                    <input type="hidden" name="moduleId" value="@m.Id" />
+                                    <button class="btn btn-sm btn-danger">Delete module</button>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                @foreach (var l in m.Lessons)
+                {
+                    <details class="syllabus-edit">
+                        <summary class="item-row">
+                            <span class="item-icon">@(string.IsNullOrEmpty(l.VideoUrl) ? "📝" : "🎬")</span>
+                            <div class="grow"><strong>@l.Title</strong>
+                                <span class="muted small">@(l.DurationMinutes > 0 ? Helpers.Duration(l.DurationMinutes) : "") @(l.IsPreview ? "· Free preview" : "") @(l.PdfStoredName != null ? "· 📄 notes" : "") @(string.IsNullOrEmpty(l.VideoUrl) ? "· no video yet" : "")</span>
+                            </div>
+                            <span class="btn btn-sm btn-ghost">Edit</span>
+                        </summary>
+                        <partial name="_LessonForm" model="(c.Id, m.Id, l)" />
+                        <form method="post" asp-page-handler="DeleteLesson" asp-route-id="@c.Id" data-confirm="Delete this lesson?" style="margin:0 0 14px">
+                            <input type="hidden" name="lessonId" value="@l.Id" />
+                            <button class="btn btn-sm btn-danger">Delete lesson</button>
+                        </form>
+                    </details>
+                }
+
+                <details class="syllabus-edit">
+                    <summary class="btn btn-sm btn-ghost" style="margin-top:8px">➕ Add lesson</summary>
+                    <partial name="_LessonForm" model="(c.Id, m.Id, (Lesson?)null)" />
+                </details>
+            </div>
+        }
+
+        <div class="card">
+            <form method="post" asp-page-handler="AddModule" asp-route-id="@c.Id" class="form inline-form">
+                <input name="title" required placeholder="New module, e.g. Phase 4 — Cloud & Terraform" />
+                <button class="btn">Add module</button>
+            </form>
+        </div>
+
+        <div class="card danger" style="margin-top:28px">
+            <h3>Delete course</h3>
+            <p class="muted small">Only possible if nobody has ordered it. Otherwise unpublish it.</p>
+            <form method="post" asp-page-handler="Delete" asp-route-id="@c.Id" data-confirm="Delete this course permanently?"><button class="btn btn-danger">Delete course</button></form>
+        </div>
+    </div>
+</section>

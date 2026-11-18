@@ -1,0 +1,140 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  iNubVision Academy (ASP.NET Core 8) — CI/CD
+#
+#  Pull request → restore + build + publish + security scan
+#  Push to main → … → Docker image to GHCR → deploy to Azure Web Apps → smoke test
+#
+#  One-time setup (see README → "CI/CD"):
+#    Repo secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID   (OIDC, no passwords stored)
+#    Repo variable: AZURE_WEBAPP_NAME   (e.g. inubvision-academy-net)
+#    Environment "production" (optional: add required reviewers for a manual approval gate)
+# ─────────────────────────────────────────────────────────────────────────────
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    name: Build & publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore AcademyNet.csproj
+
+      - name: Build
+        run: dotnet build AcademyNet.csproj -c Release --no-restore
+
+      - name: Publish
+        run: dotnet publish AcademyNet.csproj -c Release --no-build -o publish
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: academy-net
+          path: publish
+          retention-days: 7
+
+  security:
+    name: Security scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan dependencies, config and secrets
+        uses: aquasecurity/trivy-action@v0.36.0   # v-prefixed tag; see README note on pinning
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'          # report only; change to '1' to fail the pipeline on findings
+
+  docker:
+    name: Docker image → GHCR
+    needs: [build, security]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image name (lowercase)
+        id: img
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.img.outputs.name }}:latest
+            ${{ steps.img.outputs.name }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Azure Web Apps
+    needs: [build, security]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.webapp-url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: academy-net
+          path: publish
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy
+        id: deploy
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: publish
+
+      - name: Smoke test (/health)
+        run: |
+          url="${{ steps.deploy.outputs.webapp-url }}/health"
+          for i in $(seq 1 30); do
+            if curl -fsS "$url" | grep -q '"UP"'; then echo "✅ Healthy: $url"; exit 0; fi
+            echo "Waiting for app to start ($i/30)…"; sleep 10
+          done
+          echo "❌ Health check failed: $url"; exit 1

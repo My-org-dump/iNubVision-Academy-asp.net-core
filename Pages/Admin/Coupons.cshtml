@@ -1,0 +1,46 @@
+@page
+@model AcademyNet.Pages.Admin.CouponsModel
+@{
+    ViewData["Title"] = "Coupons";
+}
+<section class="page-head left">
+    <div class="wrap"><span class="eyebrow">Admin</span><h1>Coupons</h1><partial name="_AdminNav" /></div>
+</section>
+<section class="section tight">
+    <div class="wrap">
+        <div class="card" style="margin-bottom:22px">
+            <h3>New coupon</h3>
+            <form method="post" asp-page-handler="Create" class="form form-grid">
+                <label>Code <input name="code" required placeholder="BATCH2" style="text-transform:uppercase" /></label>
+                <label>Type
+                    <select name="kind"><option value="percent">% off</option><option value="flat">₹ off (flat)</option></select>
+                </label>
+                <label>Value <input name="value" type="number" min="1" required placeholder="20" /></label>
+                <label>Valid until (optional) <input name="validUntil" type="date" /></label>
+                <label>Max uses (optional) <input name="maxUses" type="number" min="1" /></label>
+                <div class="full-row"><button class="btn">Create coupon</button></div>
+            </form>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Code</th><th>Discount</th><th>Valid until</th><th>Used</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var c in Model.Coupons)
+                    {
+                        <tr>
+                            <td><code>@c.Code</code></td>
+                            <td>@(c.PercentOff is > 0 ? $"{c.PercentOff}%" : Helpers.Inr(c.AmountOffInr ?? 0))</td>
+                            <td>@(c.ValidUntilUtc?.AddHours(5.5).AddDays(-1).ToString("dd MMM yyyy") ?? "No expiry")</td>
+                            <td>@(c.UsedCount + (c.MaxUses != null ? $" / {c.MaxUses}" : ""))</td>
+                            <td>@if (c.IsActive) { <span class="pill-status ok">Active</span> } else { <span class="pill-status bad">Off</span> }</td>
+                            <td class="nowrap">
+                                <form method="post" asp-page-handler="Toggle" asp-route-id="@c.Id"><button class="btn btn-sm btn-ghost">@(c.IsActive ? "Disable" : "Enable")</button></form>
+                                <form method="post" asp-page-handler="Delete" asp-route-id="@c.Id" data-confirm="Delete coupon @(c.Code)?"><button class="btn btn-sm btn-danger">Delete</button></form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>

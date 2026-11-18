@@ -1,0 +1,46 @@
+@page
+@model AcademyNet.Pages.Admin.TestimonialsModel
+@{
+    ViewData["Title"] = "Reviews & success stories";
+}
+<section class="page-head left">
+    <div class="wrap"><span class="eyebrow">Admin</span><h1>Reviews &amp; success stories</h1><partial name="_AdminNav" /></div>
+</section>
+<section class="section tight">
+    <div class="wrap">
+        <div class="card" style="margin-bottom:22px">
+            <h3>Add a review or success story</h3>
+            <p class="muted small">Only publish genuine feedback from real students, with their permission. The home page hides these sections until you add some.</p>
+            <form method="post" asp-page-handler="Create" class="form form-grid">
+                <label>Student name <input name="name" required /></label>
+                <label>Headline <input name="headline" placeholder="e.g. DevOps Engineer at Acme · 18 LPA" /></label>
+                <label class="full-row">Review / story <textarea name="text" rows="3" required></textarea></label>
+                <label>Rating
+                    <select name="rating"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select>
+                </label>
+                <label class="check"><input type="checkbox" name="isSuccessStory" value="true" /> Show as a success story (placement)</label>
+                <div class="full-row"><button class="btn">Add</button></div>
+            </form>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Student</th><th>Text</th><th>Type</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var t in Model.Items)
+                    {
+                        <tr>
+                            <td><strong>@t.Name</strong><br /><span class="muted small">@t.Headline</span></td>
+                            <td class="small">@t.Text</td>
+                            <td>@(t.IsSuccessStory ? "Success story" : $"Review · {t.Rating}★")</td>
+                            <td>@if (t.IsPublished) { <span class="pill-status ok">Published</span> } else { <span class="pill-status warn">Hidden</span> }</td>
+                            <td class="nowrap">
+                                <form method="post" asp-page-handler="Toggle" asp-route-id="@t.Id"><button class="btn btn-sm btn-ghost">@(t.IsPublished ? "Hide" : "Publish")</button></form>
+                                <form method="post" asp-page-handler="Delete" asp-route-id="@t.Id" data-confirm="Delete?"><button class="btn btn-sm btn-danger">Delete</button></form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>

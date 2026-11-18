@@ -1,0 +1,40 @@
+@page
+@model AcademyNet.Pages.Learn.IndexModel
+@{
+    ViewData["Title"] = "My learning";
+}
+<section class="page-head left">
+    <div class="wrap">
+        <span class="eyebrow">My learning</span>
+        <h1>Welcome back, <span class="grad-text">@(Model.Name.Split(' ')[0])</span> 👋</h1>
+    </div>
+</section>
+<section class="section tight">
+    <div class="wrap">
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="card center empty">
+                <div class="big-emoji">📚</div>
+                <h3>No courses yet</h3>
+                <p class="muted">Enroll in a course and it will appear here.</p>
+                <a class="btn" href="/Courses">Browse courses</a>
+            </div>
+        }
+        else
+        {
+            <div class="course-grid">
+                @foreach (var r in Model.Rows)
+                {
+                    var pct = r.Lessons == 0 ? 0 : (int)Math.Round(100.0 * r.Done / r.Lessons);
+                    <a class="card course-card" href="/Learn/@r.Course.Slug">
+                        <div class="course-cover" style="--c:@(r.Course.Mode == CourseMode.Free ? "#10b981" : r.Course.Mode == CourseMode.Live ? "#8b5cf6" : "#3b82f6")"><span>@r.Course.Title[0]</span></div>
+                        <h3>@r.Course.Title</h3>
+                        <div class="progress-line"><i style="width:@pct%"></i></div>
+                        <span class="muted small">@r.Done / @r.Lessons lessons · @pct% complete</span>
+                        <span class="btn btn-sm" style="margin-top:16px;align-self:flex-start">@(r.Done == 0 ? "Start" : "Continue") →</span>
+                    </a>
+                }
+            </div>
+        }
+    </div>
+</section>

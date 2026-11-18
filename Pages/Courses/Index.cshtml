@@ -1,0 +1,17 @@
+@page
+@model AcademyNet.Pages.Courses.IndexModel
+@{
+    ViewData["Title"] = "Courses";
+}
+<section class="page-head">
+    <div class="wrap reveal">
+        <span class="eyebrow">Courses</span>
+        <h1>All <span class="grad-text">courses</span></h1>
+        <p class="lead" style="margin:0 auto">Live bootcamps, self-paced recordings and free projects.</p>
+    </div>
+</section>
+<section class="section" style="padding-top:30px">
+    <div class="wrap course-grid">
+        @foreach (var c in Model.Courses) { <partial name="_CourseCard" model="c" /> }
+    </div>
+</section>

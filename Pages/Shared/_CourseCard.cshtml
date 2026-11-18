@@ -1,0 +1,42 @@
+@model Course
+@{
+    var c = Model;
+    var mode = c.Mode switch { CourseMode.Live => "Live bootcamp", CourseMode.SelfPaced => "Self-paced", _ => "Free course" };
+}
+<div class="card price-card ccard reveal @(c.Badge != null && !c.IsFree ? "popular" : "")">
+    @if (!string.IsNullOrWhiteSpace(c.Badge)) { <span class="badge @(c.IsFree ? "free" : "")">@c.Badge</span> }
+    <span class="tag-cat">@mode</span>
+    <h3><a href="/Courses/@c.Slug">@c.Title</a></h3>
+    <p class="muted">@c.Subtitle</p>
+    <ul class="checks">
+        @foreach (var h in c.HighlightList.Take(5)) { <li>@h</li> }
+    </ul>
+    <div class="price-row">
+        @if (c.IsFree)
+        {
+            <span class="now">Free</span>
+        }
+        else
+        {
+            <span class="now">@Helpers.Inr(c.PriceInr)</span>
+            @if (c.MrpInr > c.PriceInr)
+            {
+                <span class="was">@Helpers.Inr(c.MrpInr)</span>
+                <span class="off">@c.DiscountPercent% off</span>
+            }
+        }
+    </div>
+    <div class="card-actions">
+        <a class="btn btn-ghost" href="/Courses/@c.Slug">Details</a>
+        @if (c.IsFree)
+        {
+            <a class="btn" href="/Courses/@c.Slug">Start free</a>
+        }
+        else
+        {
+            <form method="post" asp-page="/Cart" asp-page-handler="Add" asp-route-id="@c.Id" style="flex:1;display:flex">
+                <button class="btn full" type="submit">Enroll →</button>
+            </form>
+        }
+    </div>
+</div>

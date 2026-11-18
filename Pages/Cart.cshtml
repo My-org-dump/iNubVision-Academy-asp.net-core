@@ -1,0 +1,53 @@
+@page
+@model CartModel
+@{
+    ViewData["Title"] = "Cart";
+    var s = Model.Summary;
+}
+<section class="page-head left">
+    <div class="wrap"><span class="eyebrow">Cart</span><h1>Your <span class="grad-text">cart</span></h1></div>
+</section>
+<section class="section tight">
+    <div class="wrap">
+        @if (s.Lines.Count == 0)
+        {
+            <div class="card center empty">
+                <div class="big-emoji">🛒</div>
+                <h3>Your cart is empty</h3>
+                <p class="muted">Courses you already own are not shown here.</p>
+                <a class="btn" href="/Courses">Browse courses</a>
+            </div>
+        }
+        else
+        {
+            <div class="cart-grid">
+                <div>
+                    @foreach (var l in s.Lines)
+                    {
+                        <div class="card cart-item">
+                            <div class="thumb">@l.Course.Title[0]</div>
+                            <div class="grow"><strong><a href="/Courses/@l.Course.Slug">@l.Course.Title</a></strong><span class="muted small">@l.Course.Subtitle</span></div>
+                            <strong>@Helpers.Inr(l.PriceInr)</strong>
+                            <form method="post" asp-page-handler="Remove" asp-route-id="@l.Course.Id"><button class="icon-btn" title="Remove">✕</button></form>
+                        </div>
+                    }
+                </div>
+                <aside class="card">
+                    <h3>Order summary</h3>
+                    <form method="post" asp-page-handler="Coupon" class="coupon-form">
+                        <input name="code" placeholder="Coupon code" value="@s.Coupon?.Code" />
+                        <button class="btn btn-sm btn-ghost">Apply</button>
+                    </form>
+                    @if (s.CouponError != null) { <p class="error">@s.CouponError</p> }
+                    @if (s.Coupon != null)
+                    {
+                        <form method="post" asp-page-handler="Coupon"><button class="btn btn-sm btn-ghost" style="margin-bottom:10px">Remove coupon</button></form>
+                    }
+                    <partial name="_Summary" model="s" />
+                    <a class="btn full" href="/Checkout" style="margin-top:18px">Checkout →</a>
+                    <p class="muted small center" style="margin-top:10px">🔒 Secure payment by Razorpay · UPI · Cards · Netbanking</p>
+                </aside>
+            </div>
+        }
+    </div>
+</section>

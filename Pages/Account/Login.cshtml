@@ -1,0 +1,19 @@
+@page
+@model AcademyNet.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Log in";
+}
+<section class="auth">
+    <div class="card auth-card reveal">
+        <h1>Welcome <span class="grad-text">back</span></h1>
+        <p class="muted">Log in to continue learning.</p>
+        <form method="post" class="form">
+            <div asp-validation-summary="ModelOnly" class="error"></div>
+            <label>Email <input asp-for="Email" type="email" autocomplete="email" /></label>
+            <label>Password <input asp-for="Password" type="password" autocomplete="current-password" /></label>
+            <input type="hidden" asp-for="ReturnUrl" />
+            <button class="btn full" type="submit">Log in →</button>
+        </form>
+        <p class="muted small center" style="margin-top:18px">New here? <a class="grad-text" href="/Account/Register?returnUrl=@Uri.EscapeDataString(Model.ReturnUrl ?? "/")">Create an account</a></p>
+    </div>
+</section>

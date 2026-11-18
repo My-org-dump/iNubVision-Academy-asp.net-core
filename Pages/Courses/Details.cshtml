@@ -1,0 +1,83 @@
+@page "/Courses/{slug}"
+@model AcademyNet.Pages.Courses.DetailsModel
+@{
+    var c = Model.Course;
+    ViewData["Title"] = c.Title;
+    var mode = c.Mode switch { CourseMode.Live => "Live bootcamp", CourseMode.SelfPaced => "Self-paced", _ => "Free course" };
+}
+
+<section class="page-head left">
+    <div class="wrap">
+        <a href="/Courses" class="muted small">← All courses</a>
+        <span class="eyebrow" style="display:block;margin-top:14px">@mode</span>
+        <h1>@c.Title</h1>
+        <p class="lead">@c.Subtitle</p>
+        <div class="meta-pills">
+            @if (c.StartDate != null) { <span>🗓️ Starts @c.StartDate.Value.ToString("dd MMM yyyy")</span> }
+            @if (!string.IsNullOrWhiteSpace(c.Schedule)) { <span>⏰ @c.Schedule</span> }
+            @if (c.Hours > 0) { <span>⏱️ @c.Hours+ hours</span> }
+            @if (c.Projects > 0) { <span>🛠️ @c.Projects projects</span> }
+            <span>🎬 @Model.LessonCount lessons</span>
+        </div>
+    </div>
+</section>
+
+<section class="section tight">
+    <div class="wrap detail-grid">
+        <div>
+            @if (!string.IsNullOrWhiteSpace(c.Description))
+            {
+                <div class="card" style="margin-bottom:22px"><h3>About this course</h3><p class="prose">@c.Description</p></div>
+            }
+            <h2 class="h-sm">Course content</h2>
+            <div class="syllabus">
+                @foreach (var m in c.Modules)
+                {
+                    <details open="@(m == c.Modules.First())">
+                        <summary><span>@m.Title</span><span class="muted small">@m.Lessons.Count lessons</span></summary>
+                        <ul>
+                            @foreach (var l in m.Lessons)
+                            {
+                                <li>
+                                    <span>🎬 @l.Title @if (l.IsPreview) { <a class="badge-soft" href="/Learn/@c.Slug/@l.Id">Preview</a> }</span>
+                                    <span class="muted small">@(l.DurationMinutes > 0 ? Helpers.Duration(l.DurationMinutes) : "")</span>
+                                </li>
+                            }
+                        </ul>
+                    </details>
+                }
+            </div>
+        </div>
+
+        <aside class="card buy-card">
+            <div class="price-row">
+                @if (c.IsFree)
+                {
+                    <span class="now">Free</span>
+                }
+                else
+                {
+                    <span class="now">@Helpers.Inr(c.PriceInr)</span>
+                    @if (c.MrpInr > c.PriceInr) { <span class="was">@Helpers.Inr(c.MrpInr)</span><span class="off">@c.DiscountPercent% off</span> }
+                }
+            </div>
+            @if (Model.Owned)
+            {
+                <a class="btn full" href="/Learn/@c.Slug">Go to course →</a>
+            }
+            else if (c.IsFree)
+            {
+                <form method="post" asp-page-handler="EnrollFree" asp-route-slug="@c.Slug"><button class="btn full">Enroll for free →</button></form>
+            }
+            else
+            {
+                <form method="post" asp-page="/Cart" asp-page-handler="Add" asp-route-id="@c.Id" asp-route-checkout="true"><button class="btn full">Enroll now →</button></form>
+                <form method="post" asp-page="/Cart" asp-page-handler="Add" asp-route-id="@c.Id" style="margin-top:10px"><button class="btn btn-ghost full">Add to cart</button></form>
+                <p class="muted small center" style="margin-top:12px">Have a coupon? Apply it in the cart.</p>
+            }
+            <ul class="checks" style="margin-top:20px">
+                @foreach (var h in c.HighlightList) { <li>@h</li> }
+            </ul>
+        </aside>
+    </div>
+</section>

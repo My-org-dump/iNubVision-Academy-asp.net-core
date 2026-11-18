@@ -1,0 +1,83 @@
+@page "/Learn/{slug}/{lessonId:int?}"
+@model AcademyNet.Pages.Learn.LessonModel
+@{
+    var c = Model.Course;
+    var l = Model.Current;
+    ViewData["Title"] = l?.Title ?? c.Title;
+    var pct = Model.Total == 0 ? 0 : (int)Math.Round(100.0 * Model.Done.Count / Model.Total);
+    var (kind, src) = Helpers.Embed(l?.VideoUrl);
+}
+<section class="watch">
+    <div class="wrap">
+        <a href="@(Model.Enrolled ? "/Learn" : $"/Courses/{c.Slug}")" class="muted small">← @c.Title</a>
+        <div class="learn-grid" style="margin-top:14px">
+            <div>
+                @if (l == null)
+                {
+                    <div class="card center empty"><div class="big-emoji">🛠️</div><h3>Lessons are coming soon</h3><p class="muted">Your trainer is adding content to this course.</p></div>
+                }
+                else
+                {
+                    <div class="video-box" oncontextmenu="return false">
+                        @if (kind == "iframe")
+                        {
+                            <iframe src="@src" title="@l.Title" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+                        }
+                        else if (kind == "video")
+                        {
+                            <video src="@src" controls controlsList="nodownload" playsinline></video>
+                        }
+                        else
+                        {
+                            <div class="player-wait"><div class="big-emoji">🎬</div><h3>Video coming soon</h3><p class="muted">This lesson's recording will be added shortly.</p></div>
+                        }
+                    </div>
+                    <div class="watch-info">
+                        <div>
+                            @if (l.IsPreview && !Model.Enrolled) { <span class="badge-soft">Free preview</span> }
+                            <h1>@l.Title</h1>
+                            @if (l.DurationMinutes > 0) { <p class="muted">@Helpers.Duration(l.DurationMinutes)</p> }
+                        </div>
+                        @if (Model.Enrolled)
+                        {
+                            <form method="post" asp-page-handler="Complete" asp-route-slug="@c.Slug" asp-route-lessonId="@l.Id">
+                                <button class="btn @(Model.Done.Contains(l.Id) ? "btn-ghost" : "")">@(Model.Done.Contains(l.Id) ? "✓ Completed · Next →" : "Mark complete →")</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <a class="btn" href="/Courses/@c.Slug">Enroll to unlock all →</a>
+                        }
+                    </div>
+                    @if (l.PdfStoredName != null)
+                    {
+                        <div class="resource">
+                            <span class="item-icon">📄</span>
+                            <div class="grow"><strong>@(l.PdfOriginalName ?? "Lesson notes")</strong><span class="muted small">Notes &amp; resources</span></div>
+                            <a class="btn btn-sm" href="/files/lesson/@l.Id">⬇ Download</a>
+                        </div>
+                    }
+                }
+            </div>
+
+            <aside class="card learn-side">
+                <strong>Course progress</strong>
+                <div class="progress-line"><i style="width:@pct%"></i></div>
+                <span class="muted small">@Model.Done.Count of @Model.Total lessons · @pct%</span>
+                @foreach (var m in c.Modules)
+                {
+                    <h4>@m.Title</h4>
+                    @foreach (var x in m.Lessons)
+                    {
+                        var locked = !Model.Enrolled && !x.IsPreview;
+                        <a class="lesson-link @(x.Id == l?.Id ? "current" : "") @(Model.Done.Contains(x.Id) ? "done" : "")" href="@(locked ? $"/Courses/{c.Slug}" : $"/Learn/{c.Slug}/{x.Id}")">
+                            <span class="tick">@(Model.Done.Contains(x.Id) ? "✓" : locked ? "🔒" : "")</span>
+                            <span class="grow">@x.Title</span>
+                            @if (x.DurationMinutes > 0) { <span class="muted small">@Helpers.Duration(x.DurationMinutes)</span> }
+                        </a>
+                    }
+                }
+            </aside>
+        </div>
+    </div>
+</section>

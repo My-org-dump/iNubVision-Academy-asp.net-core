@@ -1,0 +1,32 @@
+@page
+@model AcademyNet.Pages.Checkout.IndexModel
+@{
+    ViewData["Title"] = "Checkout";
+    var s = Model.Summary;
+}
+<section class="page-head left">
+    <div class="wrap"><span class="eyebrow">Checkout</span><h1>Review your <span class="grad-text">order</span></h1></div>
+</section>
+<section class="section tight">
+    <div class="wrap cart-grid">
+        <div>
+            @foreach (var l in s.Lines)
+            {
+                <div class="card cart-item">
+                    <div class="thumb">@l.Course.Title[0]</div>
+                    <div class="grow"><strong>@l.Course.Title</strong><span class="muted small">@l.Course.Subtitle</span></div>
+                    <strong>@Helpers.Inr(l.PriceInr)</strong>
+                </div>
+            }
+            <a href="/Cart" class="muted small">← Edit cart / coupon</a>
+        </div>
+        <aside class="card">
+            <h3>Payment</h3>
+            <partial name="_Summary" model="s" />
+            <form method="post" style="margin-top:18px">
+                <button class="btn full">@(s.TotalInr > 0 ? $"Continue to pay {Helpers.Inr(s.TotalInr)} →" : "Enroll now →")</button>
+            </form>
+            <p class="muted small center" style="margin-top:10px">By continuing you agree to the <a class="grad-text" href="/Page/terms">terms</a> and <a class="grad-text" href="/Page/refund">refund policy</a>.</p>
+        </aside>
+    </div>
+</section>

@@ -1,0 +1,69 @@
+@page
+@model AcademyNet.Pages.Checkout.PayModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "Payment";
+    var o = Model.Order;
+    var tokens = Antiforgery.GetAndStoreTokens(HttpContext);
+}
+<section class="page-head left">
+    <div class="wrap"><span class="eyebrow">Order #@o.Id</span><h1>Complete your <span class="grad-text">payment</span></h1></div>
+</section>
+<section class="section tight">
+    <div class="wrap cart-grid">
+        <div>
+            @foreach (var i in o.Items)
+            {
+                <div class="card cart-item">
+                    <div class="thumb">@i.Course!.Title[0]</div>
+                    <div class="grow"><strong>@i.Course.Title</strong></div>
+                    <strong>@Helpers.Inr(i.PriceInr)</strong>
+                </div>
+            }
+        </div>
+        <aside class="card">
+            <div class="sum-row"><span>Subtotal</span><span>@Helpers.Inr(o.SubtotalInr)</span></div>
+            @if (o.DiscountInr > 0) { <div class="sum-row disc"><span>Coupon @o.CouponCode</span><span>− @Helpers.Inr(o.DiscountInr)</span></div> }
+            <div class="sum-row total"><span>Total</span><span>@Helpers.Inr(o.TotalInr)</span></div>
+
+            @if (Model.Problem != null)
+            {
+                <div class="flash flash-error">@Model.Problem</div>
+            }
+            else if (Model.DemoMode)
+            {
+                <div class="flash">Demo mode: Razorpay keys are not configured, so no real money is charged.</div>
+                <form method="post" asp-page-handler="Demo" asp-route-id="@o.Id"><button class="btn full">Simulate payment →</button></form>
+            }
+            else
+            {
+                <button class="btn full" id="pay-btn" style="margin-top:18px">Pay @Helpers.Inr(o.TotalInr) →</button>
+                <p class="error small" id="pay-msg"></p>
+            }
+            <p class="muted small center" style="margin-top:10px">🔒 UPI · Cards · Netbanking · Wallets</p>
+        </aside>
+    </div>
+</section>
+
+@section Scripts {
+    @if (!Model.DemoMode && Model.Problem == null)
+    {
+        <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+        <script>
+            window.RZP = @Json.Serialize(new
+            {
+                key = Model.KeyId,
+                orderId = o.RazorpayOrderId,
+                amount = o.TotalInr * 100,
+                brand = SiteOpts.Value.Name,
+                name = Model.Me.FullName,
+                email = Model.Me.Email,
+                phone = Model.Me.PhoneNumber,
+                verifyUrl = Url.Page("/Checkout/Pay", "Verify", new { id = o.Id }),
+                csrfName = tokens.FormFieldName,
+                csrfToken = tokens.RequestToken
+            });
+        </script>
+        <script src="~/js/checkout.js" asp-append-version="true"></script>
+    }
+}

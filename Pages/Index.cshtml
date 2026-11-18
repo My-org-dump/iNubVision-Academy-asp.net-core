@@ -1,0 +1,247 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Become a production-ready DevOps engineer";
+    var site = SiteOpts.Value;
+    var featured = Model.Courses.FirstOrDefault(c => !c.IsFree);
+}
+
+<!-- HERO -->
+<section class="hero">
+    <div class="wrap hero-grid">
+        <div class="reveal">
+            <span class="pill"><b>Live</b> DevOps · Cloud · DevSecOps · AI</span>
+            <h1>Become a<br /><span class="grad-text">production-ready</span><br />DevOps engineer.</h1>
+            <p class="lead">@site.Tagline</p>
+            <div class="actions">
+                @if (featured != null) { <a class="btn" href="/Courses/@featured.Slug">Enroll in @featured.Title.Split('—')[0].Trim() →</a> }
+                <a class="btn btn-ghost" href="#courses">View all courses</a>
+            </div>
+        </div>
+        <div class="term-wrap reveal">
+            <div class="pipe">
+                <div class="pipe-head"><span>pipeline · main · aks-prod</span><span style="color:var(--green)">● running</span></div>
+                <div class="pipe-stages">
+                    <div class="stage done"><b>✓</b>Commit</div>
+                    <div class="stage done"><b>✓</b>Build</div>
+                    <div class="stage done"><b>✓</b>Test</div>
+                    <div class="stage done"><b>✓</b>Scan</div>
+                    <div class="stage done"><b>✓</b>Image</div>
+                    <div class="stage run"><b>⟳</b>Deploy</div>
+                </div>
+                <div class="pipe-metrics">
+                    <div><strong id="rps">1,564</strong><span>requests / s</span></div>
+                    <div><strong>113 ms</strong><span>p95 latency</span></div>
+                    <div><strong style="color:var(--green)">12 / 12</strong><span>pods ready</span></div>
+                </div>
+<pre class="pipe-log"><span class="ok">✔</span> trivy: 0 critical vulnerabilities
+<span class="ok">✔</span> sonarqube: quality gate passed
+<span class="ok">✔</span> helm upgrade api --atomic   rollout complete</pre>
+            </div>
+            <div class="float-card a"><span class="muted small">Projects</span><strong class="grad-text">Real-world</strong></div>
+            <div class="float-card b"><span class="muted small">Classes</span><strong style="color:var(--green)">● Live + recorded</strong></div>
+        </div>
+    </div>
+</section>
+
+<!-- STATS -->
+@if (site.Stats.Count > 0)
+{
+    <section class="section" style="padding:20px 0 60px">
+        <div class="wrap">
+            <div class="stats-grid reveal">
+                @foreach (var s in site.Stats.Take(4))
+                {
+                    <div class="stat"><strong data-count="@s.Value" data-suffix="@s.Suffix">0</strong><span>@s.Label</span></div>
+                }
+            </div>
+        </div>
+    </section>
+}
+
+<!-- TECH STRIP -->
+@if (site.Technologies.Count > 0)
+{
+    <div class="marquee"><div class="marquee-track">
+        @foreach (var t in site.Technologies.Concat(site.Technologies)) { <span>@t</span> }
+    </div></div>
+}
+
+<!-- WEBINARS -->
+@if (site.Webinars.Count > 0)
+{
+    <section class="section">
+        <div class="wrap">
+            <div class="section-head reveal"><span class="eyebrow">Free webinars</span><h2>Learn something <span class="grad-text">today, for free</span></h2></div>
+            <div class="two-col">
+                @foreach (var w in site.Webinars)
+                {
+                    <a class="card webinar reveal" href="@w.Url" target="_blank" rel="noopener">
+                        <div class="thumb">▶</div>
+                        <div><span class="badge-soft">FREE</span><h3 style="margin-top:10px">@w.Title</h3><p class="muted small">@w.Info</p></div>
+                    </a>
+                }
+            </div>
+        </div>
+    </section>
+}
+
+<!-- COURSES -->
+<section class="section" id="courses">
+    <div class="wrap">
+        <div class="section-head reveal"><span class="eyebrow">Courses</span><h2>Choose your <span class="grad-text">path</span></h2><p class="muted">Live bootcamp, self-paced recordings, or start free.</p></div>
+        <div class="course-grid">
+            @foreach (var c in Model.Courses) { <partial name="_CourseCard" model="c" /> }
+        </div>
+    </div>
+</section>
+
+<!-- WHY US -->
+<section class="section">
+    <div class="wrap">
+        <div class="section-head reveal"><span class="eyebrow">Why @site.Name</span><h2>Learn the way <span class="grad-text">real teams work</span></h2></div>
+        <div class="steps reveal">
+            <div class="step"><div class="num"><b>01</b></div><h4>Learn from a practitioner</h4><p class="muted">Taught by an engineer who runs production pipelines every day.</p></div>
+            <div class="step"><div class="num"><b>02</b></div><h4>Build real projects</h4><p class="muted">CI/CD, Kubernetes, Terraform and DevSecOps projects you can show.</p></div>
+            <div class="step"><div class="num"><b>03</b></div><h4>Live + recorded</h4><p class="muted">Join live on weekends, rewatch any class later.</p></div>
+            <div class="step"><div class="num"><b>04</b></div><h4>Get interview-ready</h4><p class="muted">Resume review, mock interviews and doubt support.</p></div>
+        </div>
+    </div>
+</section>
+
+<!-- CURRICULUM -->
+<section class="section">
+    <div class="wrap">
+        <div class="section-head reveal"><span class="eyebrow">Curriculum</span><h2>Master <span class="grad-text">DevOps + Cloud + AI</span></h2></div>
+        <div class="phases">
+            <div class="card phase reveal"><span class="n">PHASE 01</span><h4>Foundations</h4><p>Linux, networking, shell scripting, Git.</p></div>
+            <div class="card phase reveal"><span class="n">PHASE 02</span><h4>CI/CD</h4><p>Jenkins, GitHub Actions, GitLab CI, Azure DevOps.</p></div>
+            <div class="card phase reveal"><span class="n">PHASE 03</span><h4>Containers</h4><p>Docker, Kubernetes, Helm, Argo CD (GitOps).</p></div>
+            <div class="card phase reveal"><span class="n">PHASE 04</span><h4>Cloud &amp; IaC</h4><p>Azure, AWS, Terraform, Ansible.</p></div>
+            <div class="card phase reveal"><span class="n">PHASE 05</span><h4>DevSecOps</h4><p>SonarQube, Trivy, Vault, policy as code.</p></div>
+            <div class="card phase reveal"><span class="n">PHASE 06</span><h4>Observability</h4><p>Prometheus, Grafana, Loki, alerting.</p></div>
+            <div class="card phase reveal"><span class="n">PHASE 07</span><h4>AI for DevOps</h4><p>MLOps, AI agents and automation.</p></div>
+            <div class="card phase reveal"><span class="n">PHASE 08</span><h4>Career</h4><p>Resume, LinkedIn, mock interviews.</p></div>
+        </div>
+    </div>
+</section>
+
+<!-- TRAINER -->
+<section class="section" id="trainer">
+    <div class="wrap two-col">
+        <div class="reveal">
+            <span class="eyebrow">Your trainer</span>
+            <h2>@site.TrainerName</h2>
+            <p class="muted prose">@site.TrainerBio</p>
+        </div>
+        <div class="card reveal">
+            <h3>What you get</h3>
+            <ul class="checks">
+                <li>Weekend live classes with Q&amp;A</li>
+                <li>Recordings of every class</li>
+                <li>Project source code and docs</li>
+                <li>Doubt support and community</li>
+                <li>Resume review and mock interviews</li>
+                <li>Certificate of completion</li>
+            </ul>
+        </div>
+    </div>
+</section>
+
+<!-- SUCCESS STORIES -->
+@if (Model.Stories.Count > 0)
+{
+    <section class="section" id="stories">
+        <div class="wrap">
+            <div class="section-head reveal"><span class="eyebrow">Success stories</span><h2>Students who <span class="grad-text">made the switch</span></h2></div>
+            <div class="grid-3">
+                @foreach (var s in Model.Stories)
+                {
+                    <div class="card story reveal">
+                        <strong class="pkg">@s.Headline</strong>
+                        <p class="muted">@s.Text</p>
+                        <div class="quote"><div class="by"><span class="avatar sm">@(s.Name.Length > 0 ? s.Name[0] : '?')</span><b>@s.Name</b></div></div>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <span id="stories"></span>
+}
+
+<!-- TESTIMONIALS -->
+@if (Model.Reviews.Count > 0)
+{
+    <section class="section">
+        <div class="wrap">
+            <div class="section-head reveal"><span class="eyebrow">Reviews</span><h2>What students <span class="grad-text">say</span></h2></div>
+            <div class="wall">
+                @foreach (var r in Model.Reviews)
+                {
+                    <div class="card quote reveal">
+                        <div class="stars">@(new string('★', Math.Clamp(r.Rating, 1, 5)))</div>
+                        <p>@r.Text</p>
+                        <div class="by"><span class="avatar sm">@(r.Name.Length > 0 ? r.Name[0] : '?')</span><div><b>@r.Name</b><small>@r.Headline</small></div></div>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+}
+
+<!-- HOW TO ENROLL -->
+<section class="section">
+    <div class="wrap">
+        <div class="section-head reveal"><span class="eyebrow">How to enroll</span><h2>Start in <span class="grad-text">4 simple steps</span></h2></div>
+        <div class="steps reveal">
+            <div class="step"><div class="num"><b>01</b></div><h4>Pick a course</h4><p class="muted">Open the course page and click Enroll.</p></div>
+            <div class="step"><div class="num"><b>02</b></div><h4>Apply a coupon</h4><p class="muted">Add your coupon code in the cart.</p></div>
+            <div class="step"><div class="num"><b>03</b></div><h4>Pay securely</h4><p class="muted">UPI, cards or netbanking via Razorpay.</p></div>
+            <div class="step"><div class="num"><b>04</b></div><h4>Start learning</h4><p class="muted">Access is instant in My learning.</p></div>
+        </div>
+    </div>
+</section>
+
+<!-- FAQ -->
+<section class="section" id="faq">
+    <div class="wrap">
+        <div class="section-head reveal"><span class="eyebrow">FAQ</span><h2>Questions, <span class="grad-text">answered</span></h2></div>
+        <div class="faq reveal">
+            <details open><summary>Do I need prior experience?</summary><p>No. We start from Linux and Git basics. Freshers, testers, support engineers and developers all join.</p></details>
+            <details><summary>How do I enroll?</summary><p>Choose a course, click Enroll, apply a coupon if you have one and pay with UPI, card or netbanking. Access starts immediately.</p></details>
+            <details><summary>Will I get recordings?</summary><p>Yes. Every live class is recorded and available in My learning.</p></details>
+            <details><summary>Is there a certificate?</summary><p>Yes, you get a certificate of completion after finishing the course projects.</p></details>
+            <details><summary>What is the refund policy?</summary><p>See our <a class="grad-text" href="/Page/refund">refund policy</a>.</p></details>
+            <details><summary>What is DevOps?</summary><p>DevOps is how modern teams build, test, secure and ship software quickly and reliably, using automation, CI/CD, containers and cloud.</p></details>
+        </div>
+    </div>
+</section>
+
+<!-- CONTACT -->
+<section class="section" id="contact">
+    <div class="wrap two-col">
+        <div class="reveal">
+            <span class="eyebrow">Contact</span>
+            <h2>Talk to <span class="grad-text">us</span></h2>
+            <p class="muted">Questions about a course, batch timings or payments? Send a message and we'll reply within one working day.</p>
+            <div class="contact-item"><div class="icon">📧</div><div><span class="muted small">Email</span><br />@site.Email</div></div>
+            <div class="contact-item"><div class="icon">📞</div><div><span class="muted small">Phone</span><br />@site.Phone</div></div>
+            @if (!string.IsNullOrWhiteSpace(site.WhatsApp))
+            {
+                <a class="contact-item" href="https://wa.me/@site.WhatsApp" target="_blank" rel="noopener"><div class="icon">💬</div><div><span class="muted small">WhatsApp</span><br />Chat with us</div></a>
+            }
+        </div>
+        <div class="card reveal">
+            <form method="post" asp-page-handler="Contact" class="form">
+                <label>Name <input asp-for="Contact.Name" /></label>
+                <label>Email <input asp-for="Contact.Email" type="email" /></label>
+                <label>Phone <input asp-for="Contact.Phone" type="tel" /></label>
+                <label>Message <textarea asp-for="Contact.Message" rows="4"></textarea></label>
+                <button class="btn full" type="submit">Send message →</button>
+            </form>
+        </div>
+    </div>
+</section>

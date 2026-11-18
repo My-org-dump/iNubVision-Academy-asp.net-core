@@ -1,0 +1,27 @@
+@page
+@model AcademyNet.Pages.Admin.MessagesModel
+@{
+    ViewData["Title"] = "Messages";
+}
+<section class="page-head left">
+    <div class="wrap"><span class="eyebrow">Admin</span><h1>Contact messages</h1><partial name="_AdminNav" /></div>
+</section>
+<section class="section tight">
+    <div class="wrap">
+        @if (Model.Messages.Count == 0) { <div class="card center empty"><p class="muted">No messages yet.</p></div> }
+        @foreach (var m in Model.Messages)
+        {
+            <div class="card" style="margin-bottom:14px;@(m.IsHandled ? "opacity:.6" : "")">
+                <div class="head-row">
+                    <div><strong>@m.Name</strong> <span class="muted small">· @m.Email · @m.Phone · @m.CreatedUtc.ToString("dd MMM yyyy HH:mm") UTC</span></div>
+                    <div class="row-actions">
+                        <a class="btn btn-sm btn-ghost" href="mailto:@m.Email">Reply</a>
+                        <form method="post" asp-page-handler="Toggle" asp-route-id="@m.Id"><button class="btn btn-sm btn-ghost">@(m.IsHandled ? "Mark new" : "✓ Done")</button></form>
+                        <form method="post" asp-page-handler="Delete" asp-route-id="@m.Id" data-confirm="Delete this message?"><button class="btn btn-sm btn-danger">Delete</button></form>
+                    </div>
+                </div>
+                <p class="prose" style="margin-top:10px">@m.Message</p>
+            </div>
+        }
+    </div>
+</section>

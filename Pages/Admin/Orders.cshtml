@@ -1,0 +1,14 @@
+@page
+@model AcademyNet.Pages.Admin.OrdersModel
+@{
+    ViewData["Title"] = "Orders";
+    string T(string? s) => string.Equals(Model.Status, s, StringComparison.OrdinalIgnoreCase) ? "active" : "";
+}
+<section class="page-head left">
+    <div class="wrap">
+        <span class="eyebrow">Admin</span><h1>Orders</h1>
+        <partial name="_AdminNav" />
+        <div class="tabs"><a class="@T(null)" href="/Admin/Orders">All</a><a class="@T("Paid")" href="/Admin/Orders?status=Paid">Paid</a><a class="@T("Pending")" href="/Admin/Orders?status=Pending">Pending</a><a class="@T("Failed")" href="/Admin/Orders?status=Failed">Failed</a></div>
+    </div>
+</section>
+<section class="section tight"><div class="wrap"><partial name="_OrdersTable" model="Model.Orders" /></div></section>

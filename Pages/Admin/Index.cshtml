@@ -1,0 +1,30 @@
+@page
+@model AcademyNet.Pages.Admin.IndexModel
+@{
+    ViewData["Title"] = "Admin";
+}
+<section class="page-head left">
+    <div class="wrap">
+        <span class="eyebrow">Admin</span>
+        <h1>Academy <span class="grad-text">dashboard</span></h1>
+        <partial name="_AdminNav" />
+    </div>
+</section>
+<section class="section tight">
+    <div class="wrap">
+        @if (!Model.RazorpayLive)
+        {
+            <div class="flash">ℹ️ Payments are in <b>demo mode</b>. Add your Razorpay <code>KeyId</code> and <code>KeySecret</code> in settings to accept real payments.</div>
+        }
+        <div class="stats-grid">
+            <div class="stat"><strong>@Helpers.Inr(Model.Revenue)</strong><span>Revenue (@Model.PaidOrders paid orders)</span></div>
+            <a class="stat" href="/Admin/Students"><strong>@Model.Students</strong><span>Registered users</span></a>
+            <div class="stat"><strong>@Model.Enrollments</strong><span>Enrollments</span></div>
+            <a class="stat" href="/Admin/Messages"><strong>@Model.NewMessages</strong><span>New messages</span></a>
+        </div>
+        <div class="card" style="margin-top:28px">
+            <h3>Recent orders</h3>
+            <partial name="_OrdersTable" model="Model.Recent" />
+        </div>
+    </div>
+</section>

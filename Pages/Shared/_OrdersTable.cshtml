@@ -1,0 +1,32 @@
+@model List<Order>
+@if (Model.Count == 0)
+{
+    <p class="muted">No orders yet.</p>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>#</th><th>Date</th><th>Student</th><th>Courses</th><th>Coupon</th><th>Total</th><th>Status</th><th>Payment ID</th></tr></thead>
+            <tbody>
+                @foreach (var o in Model)
+                {
+                    <tr>
+                        <td>@o.Id</td>
+                        <td class="nowrap">@o.CreatedUtc.ToLocalTime().ToString("dd MMM yy, HH:mm")</td>
+                        <td>@o.User?.FullName<br /><span class="muted small">@o.User?.Email</span></td>
+                        <td>@string.Join(", ", o.Items.Select(i => i.Course?.Title))</td>
+                        <td>@(o.CouponCode ?? "—")</td>
+                        <td class="nowrap">@Helpers.Inr(o.TotalInr)</td>
+                        <td>
+                            @if (o.Status == OrderStatus.Paid) { <span class="pill-status ok">Paid</span> }
+                            else if (o.Status == OrderStatus.Failed) { <span class="pill-status bad">Failed</span> }
+                            else { <span class="pill-status warn">Pending</span> }
+                        </td>
+                        <td class="small">@o.RazorpayPaymentId</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

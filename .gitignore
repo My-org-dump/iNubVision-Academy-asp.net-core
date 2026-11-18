@@ -1,0 +1,10 @@
+bin/
+obj/
+publish/
+App_Data/
+*.db
+*.db-shm
+*.db-wal
+appsettings.Production.json
+.vs/
+*.user

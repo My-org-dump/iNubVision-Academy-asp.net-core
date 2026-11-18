@@ -1,0 +1,13 @@
+@{
+    var p = Context.Request.Path.Value ?? "";
+    string A(string x) => p.Equals(x, StringComparison.OrdinalIgnoreCase) || (x != "/Admin" && p.StartsWith(x, StringComparison.OrdinalIgnoreCase)) ? "active" : "";
+}
+<nav class="admin-nav">
+    <a class="@A("/Admin")" href="/Admin">📊 Dashboard</a>
+    <a class="@A("/Admin/Course")" href="/Admin/Courses">📚 Courses</a>
+    <a class="@A("/Admin/Coupons")" href="/Admin/Coupons">🏷️ Coupons</a>
+    <a class="@A("/Admin/Orders")" href="/Admin/Orders">🧾 Orders</a>
+    <a class="@A("/Admin/Students")" href="/Admin/Students">👥 Students</a>
+    <a class="@A("/Admin/Messages")" href="/Admin/Messages">✉️ Messages</a>
+    <a class="@A("/Admin/Testimonials")" href="/Admin/Testimonials">⭐ Reviews</a>
+</nav>

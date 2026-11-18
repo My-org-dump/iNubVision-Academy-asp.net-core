@@ -1,0 +1,7 @@
+@model CartSummary
+<div class="sum-row"><span>Subtotal</span><span>@Helpers.Inr(Model.SubtotalInr)</span></div>
+@if (Model.DiscountInr > 0)
+{
+    <div class="sum-row disc"><span>Coupon @Model.Coupon?.Code</span><span>− @Helpers.Inr(Model.DiscountInr)</span></div>
+}
+<div class="sum-row total"><span>Total</span><span>@Helpers.Inr(Model.TotalInr)</span></div>

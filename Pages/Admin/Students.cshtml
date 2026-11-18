@@ -1,0 +1,61 @@
+@page
+@model AcademyNet.Pages.Admin.StudentsModel
+@{
+    ViewData["Title"] = "Students";
+}
+<section class="page-head left">
+    <div class="wrap">
+        <span class="eyebrow">Admin</span><h1>Students</h1>
+        <partial name="_AdminNav" />
+        <form method="get" class="search"><input name="q" value="@Model.Q" placeholder="Search name, email, phone…" /></form>
+    </div>
+</section>
+<section class="section tight">
+    <div class="wrap table-wrap">
+        <table class="table">
+            <thead><tr><th>Student</th><th>Phone</th><th>Joined</th><th>Role</th><th>Courses</th><th>Grant access</th></tr></thead>
+            <tbody>
+                @foreach (var r in Model.Rows)
+                {
+                    <tr>
+                        <td><strong>@r.User.FullName</strong><br /><span class="muted small">@r.User.Email</span></td>
+                        <td>@r.User.PhoneNumber</td>
+                        <td class="nowrap">@r.User.CreatedUtc.ToString("dd MMM yyyy")</td>
+                        <td class="nowrap">
+                            @{ var isAdmin = Model.AdminIds.Contains(r.User.Id); }
+                            @if (isAdmin) { <span class="pill-status ok">Admin</span> } else { <span class="pill-status warn">Student</span> }
+                            <form method="post" asp-page-handler="Role" asp-route-q="@Model.Q"
+                                  data-confirm="@(isAdmin ? $"Remove admin rights from {r.User.Email}?" : $"Give full admin access to {r.User.Email}?")">
+                                <input type="hidden" name="userId" value="@r.User.Id" />
+                                <input type="hidden" name="makeAdmin" value="@(isAdmin ? "false" : "true")" />
+                                <button class="btn btn-sm btn-ghost">@(isAdmin ? "Remove admin" : "Make admin")</button>
+                            </form>
+                        </td>
+                        <td>
+                            @foreach (var e in r.Enrollments)
+                            {
+                                <div class="nowrap small">
+                                    @e.Course?.Title <span class="muted">(@e.Source)</span>
+                                    <form method="post" asp-page-handler="Revoke" asp-route-q="@Model.Q" data-confirm="Remove access to @(e.Course?.Title)?">
+                                        <input type="hidden" name="userId" value="@r.User.Id" /><input type="hidden" name="courseId" value="@e.CourseId" />
+                                        <button class="icon-btn" title="Remove access" style="width:24px;height:24px;font-size:.7rem">✕</button>
+                                    </form>
+                                </div>
+                            }
+                            @if (r.Enrollments.Count == 0) { <span class="muted">—</span> }
+                        </td>
+                        <td>
+                            <form method="post" asp-page-handler="Grant" asp-route-q="@Model.Q" class="inline-form">
+                                <input type="hidden" name="userId" value="@r.User.Id" />
+                                <select name="courseId" style="padding:8px;border-radius:8px;background:var(--surface);color:var(--text);border:1px solid var(--border-strong)">
+                                    @foreach (var c in Model.AllCourses) { <option value="@c.Id">@c.Title</option> }
+                                </select>
+                                <button class="btn btn-sm">Grant</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>

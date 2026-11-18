@@ -1,0 +1,21 @@
+@page
+@model AcademyNet.Pages.Account.RegisterModel
+@{
+    ViewData["Title"] = "Create account";
+}
+<section class="auth">
+    <div class="card auth-card reveal">
+        <h1>Create your <span class="grad-text">account</span></h1>
+        <p class="muted">It takes 30 seconds. You'll be able to enroll right after.</p>
+        <form method="post" class="form">
+            <div asp-validation-summary="All" class="error"></div>
+            <label>Full name <input asp-for="Input.FullName" autocomplete="name" /></label>
+            <label>Email <input asp-for="Input.Email" type="email" autocomplete="email" /></label>
+            <label>Mobile number <input asp-for="Input.Phone" type="tel" placeholder="+91" autocomplete="tel" /></label>
+            <label>Password (min 8 characters, include a number) <input asp-for="Input.Password" type="password" autocomplete="new-password" /></label>
+            <input type="hidden" asp-for="ReturnUrl" />
+            <button class="btn full" type="submit">Create account →</button>
+        </form>
+        <p class="muted small center" style="margin-top:18px">Already registered? <a class="grad-text" href="/Account/Login">Log in</a></p>
+    </div>
+</section>

@@ -1,0 +1,37 @@
+@page
+@model AcademyNet.Pages.Admin.CoursesModel
+@{
+    ViewData["Title"] = "Courses";
+}
+<section class="page-head left">
+    <div class="wrap"><span class="eyebrow">Admin</span><h1>Courses</h1><partial name="_AdminNav" /></div>
+</section>
+<section class="section tight">
+    <div class="wrap">
+        <div class="card" style="margin-bottom:22px">
+            <form method="post" asp-page-handler="Create" class="form inline-form">
+                <input name="title" required placeholder="New course title, e.g. Kubernetes Mastery (Batch 2)" />
+                <button class="btn">➕ Create course</button>
+            </form>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Course</th><th>Type</th><th>Price</th><th>Lessons</th><th>Students</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Rows)
+                    {
+                        <tr>
+                            <td><strong>@r.Course.Title</strong><br /><span class="muted small">/Courses/@r.Course.Slug</span></td>
+                            <td>@r.Course.Mode</td>
+                            <td class="nowrap">@(r.Course.IsFree ? "Free" : Helpers.Inr(r.Course.PriceInr))</td>
+                            <td>@r.Lessons</td>
+                            <td>@r.Students</td>
+                            <td>@if (r.Course.IsPublished) { <span class="pill-status ok">Published</span> } else { <span class="pill-status warn">Draft</span> }</td>
+                            <td class="nowrap"><a class="btn btn-sm" href="/Admin/Course?id=@r.Course.Id">Edit</a> <a class="btn btn-sm btn-ghost" href="/Courses/@r.Course.Slug" target="_blank">View</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>

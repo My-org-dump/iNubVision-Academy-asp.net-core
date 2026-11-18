@@ -1,0 +1,19 @@
+@model (int CourseId, int ModuleId, Lesson? Lesson)
+@{
+    var l = Model.Lesson;
+}
+<form method="post" asp-page="/Admin/Course" asp-page-handler="SaveLesson" asp-route-id="@Model.CourseId" enctype="multipart/form-data" class="form form-grid" style="padding:16px 4px">
+    <input type="hidden" name="moduleId" value="@Model.ModuleId" />
+    <input type="hidden" name="lessonId" value="@(l?.Id ?? 0)" />
+    <label class="full-row">Lesson title <input name="title" value="@l?.Title" required /></label>
+    <label class="full-row">Video URL <input name="videoUrl" value="@l?.VideoUrl" placeholder="YouTube (unlisted), Vimeo, Cloudflare Stream iframe URL or .mp4 link" /></label>
+    <label>Duration (minutes) <input name="durationMinutes" type="number" min="0" value="@(l?.DurationMinutes ?? 0)" /></label>
+    <label>Order <input name="sortOrder" type="number" value="@(l?.SortOrder ?? 0)" /></label>
+    <label class="full-row">Notes / PDF @(l?.PdfOriginalName != null ? $"(current: {l.PdfOriginalName})" : "") <input name="pdf" type="file" accept=".pdf,.zip,.docx,.pptx,.xlsx,.txt,.md,.yaml,.yml" /></label>
+    <label class="check"><input type="checkbox" name="isPreview" value="true" @(l?.IsPreview == true ? "checked" : "") /> Free preview</label>
+    @if (l?.PdfStoredName != null)
+    {
+        <label class="check"><input type="checkbox" name="removePdf" value="true" /> Remove current notes</label>
+    }
+    <div class="full-row"><button class="btn btn-sm">@(l == null ? "Add lesson" : "Save lesson")</button></div>
+</form>

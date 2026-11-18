@@ -1,0 +1,35 @@
+@page "/Page/{slug}"
+@{
+    var slug = (RouteData.Values["slug"]?.ToString() ?? "").ToLowerInvariant();
+    var site = SiteOpts.Value;
+    var title = slug switch { "terms" => "Terms of use", "privacy" => "Privacy policy", "refund" => "Refund policy", _ => "" };
+    if (title == "") { Context.Response.StatusCode = 404; }
+    ViewData["Title"] = title == "" ? "Not found" : title;
+}
+<section class="page-head left"><div class="wrap"><span class="eyebrow">@site.Name</span><h1>@(title == "" ? "Page not found" : title)</h1><p class="muted small">Template text: review with a legal advisor before going live.</p></div></section>
+<section class="section tight"><div class="wrap"><div class="card">
+@switch (slug)
+{
+    case "terms":
+        <p>By creating an account or purchasing a course on @site.Name you agree to these terms.</p>
+        <p>1. Course access is personal and non-transferable. Sharing your login or course content is not allowed and may lead to account suspension without refund.</p>
+        <p>2. Course content, recordings, source code and documents are the intellectual property of @site.Name and are licensed to you for personal learning only.</p>
+        <p>3. Live class schedules may change; we will inform enrolled students in advance.</p>
+        <p>4. We may update these terms. Continued use of the site means you accept the updated terms.</p>
+        <p>Contact: @site.Email</p>
+        break;
+    case "privacy":
+        <p>We collect your name, email and phone number to create your account, deliver courses and contact you about your enrollment.</p>
+        <p>Payments are processed by Razorpay. We do not store your card, UPI or bank details.</p>
+        <p>We never sell your personal data. You can ask us to delete your account at any time by writing to @site.Email.</p>
+        break;
+    case "refund":
+        <p>If you are not satisfied, request a refund within 7 days of purchase by writing to @site.Email with your order number.</p>
+        <p>Refunds are not available after 7 days, or if more than 25% of the course content has been accessed.</p>
+        <p>Approved refunds are returned to the original payment method within 5–7 working days.</p>
+        break;
+    default:
+        <p>The page you are looking for does not exist. <a class="grad-text" href="/">Go home</a>.</p>
+        break;
+}
+</div></div></section>

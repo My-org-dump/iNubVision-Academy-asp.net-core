@@ -1,0 +1,13 @@
+# ASP.NET Core version (SQLite in a volume):  docker compose up -d --build   → http://localhost:8081
+services:
+  app:
+    build: .
+    ports: ["8081:8080"]
+    environment:
+      Admin__Email: admin@inubvision.com
+      Admin__Password: ChangeMe123
+      Razorpay__KeyId: ""
+      Razorpay__KeySecret: ""
+    volumes: [appdata:/app/App_Data]
+volumes:
+  appdata:

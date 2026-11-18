@@ -1,0 +1,94 @@
+@inject CartService Cart
+@{
+    var site = SiteOpts.Value;
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var isAdmin = User.IsInRole(Roles.Admin);
+    var cartCount = Cart.Count;
+    var path = Context.Request.Path.Value ?? "/";
+    string Active(string p) => path.StartsWith(p, StringComparison.OrdinalIgnoreCase) ? "active" : "";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070a14" />
+    <title>@ViewData["Title"] | @site.Name</title>
+    <meta name="description" content="@site.Tagline" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="aurora"><span></span></div>
+    <div class="grid-bg"></div>
+
+    @if (!string.IsNullOrWhiteSpace(site.Announcement))
+    {
+        <div class="announce">@site.Announcement @if (!string.IsNullOrWhiteSpace(site.AnnouncementLink)) { <a href="@site.AnnouncementLink">Enroll now →</a> }</div>
+    }
+
+    <header class="topbar">
+        <div class="wrap nav">
+            <a class="brand" href="/"><span class="logo">iN</span> @site.Name</a>
+            <button class="menu-btn" aria-label="Menu" onclick="document.body.classList.toggle('menu-open')">☰</button>
+            <nav class="links">
+                <a class="@Active("/Courses")" href="/Courses">Courses</a>
+                <a href="/#stories">Success stories</a>
+                <a href="/#trainer">About</a>
+                <a href="/#contact">Contact</a>
+                <a class="cart-link @Active("/Cart")" href="/Cart">🛒 Cart @if (cartCount > 0) { <span class="cart-count">@cartCount</span> }</a>
+                @if (signedIn)
+                {
+                    <a class="@Active("/Learn")" href="/Learn">My learning</a>
+                    @if (isAdmin) { <a class="@Active("/Admin")" href="/Admin">Admin</a> }
+                    <form method="post" asp-page="/Account/Logout" class="inline"><button class="btn btn-sm btn-ghost">Log out</button></form>
+                }
+                else
+                {
+                    <a class="@Active("/Account/Login")" href="/Account/Login">Log in</a>
+                    <a class="btn btn-sm" href="/Courses">Enroll now →</a>
+                }
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        @if (TempData["Flash"] is string flash) { <div class="wrap"><div class="flash">@flash</div></div> }
+        @if (TempData["Error"] is string err) { <div class="wrap"><div class="flash flash-error">@err</div></div> }
+        @RenderBody()
+    </main>
+
+    <footer class="footer">
+        <div class="wrap footer-grid">
+            <div>
+                <div class="brand"><span class="logo">iN</span> @site.Name</div>
+                <p class="muted" style="max-width:360px">@site.Tagline</p>
+            </div>
+            <div>
+                <h4>Company</h4>
+                <a href="/Courses">Courses</a>
+                <a href="/#faq">FAQs</a>
+                <a href="/Page/terms">Terms of use</a>
+                <a href="/Page/privacy">Privacy policy</a>
+                <a href="/Page/refund">Refund policy</a>
+            </div>
+            <div>
+                <h4>Contact</h4>
+                <span>@site.Email</span>
+                <span>@site.Phone</span>
+                @if (!string.IsNullOrWhiteSpace(site.YouTube)) { <a href="@site.YouTube" target="_blank" rel="noopener">YouTube</a> }
+                @if (!string.IsNullOrWhiteSpace(site.LinkedIn)) { <a href="@site.LinkedIn" target="_blank" rel="noopener">LinkedIn</a> }
+                @if (!string.IsNullOrWhiteSpace(site.Instagram)) { <a href="@site.Instagram" target="_blank" rel="noopener">Instagram</a> }
+            </div>
+        </div>
+        <div class="wrap footer-bottom">
+            <span>&copy; @DateTime.Now.Year @site.Name. All rights reserved.</span>
+            <span class="muted">Built with ASP.NET Core</span>
+        </div>
+    </footer>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
