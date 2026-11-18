@@ -1,15 +1,17 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  iNubVision Academy (ASP.NET Core 8) — CI/CD
+#  iNubVision Academy (ASP.NET Core 8) — CI/CD → IIS on an Azure Windows VM
 #
-#  Pull request → restore + build + publish + security scan
-#  Push to main → … → Docker image to GHCR → deploy to Azure Web Apps → smoke test
+#  Pull request → build + security scan
+#  Push to main → build + scan → (approval, optional) → deploy to IIS on the VM
+#                 → health check → automatic rollback if the new version fails
 #
-#  One-time setup (see README → "CI/CD"):
-#    Repo secrets: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID   (OIDC, no passwords stored)
-#    Repo variable: AZURE_WEBAPP_NAME   (e.g. inubvision-academy-net)
-#    Environment "production" (optional: add required reviewers for a manual approval gate)
+#  One-time setup (see README):
+#    deploy/azure/create-vm.ps1       → VM + IIS + .NET 8 Hosting Bundle
+#    deploy/azure/configure-vm.ps1    → admin login + Razorpay keys on the VM
+#    deploy/azure/install-runner.ps1  → GitHub self-hosted runner on the VM (label: iis-prod)
+#    GitHub → Settings → Environments → "production-vm" (optional required reviewers)
 # ─────────────────────────────────────────────────────────────────────────────
-name: CI/CD
+name: CI/CD (IIS on Azure VM)
 
 on:
   push:
@@ -22,15 +24,20 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: deploy-iis-vm
+  cancel-in-progress: false      # never cancel a deployment half-way
 
 env:
   DOTNET_VERSION: '8.0.x'
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  SITE_NAME: AcademyNet
+  SITE_PATH: C:\inetpub\AcademyNet
+  BACKUP_ROOT: C:\inetpub\_backups\AcademyNet
+  HEALTH_URL: http://localhost/health
 
 jobs:
+  # ─────────────── runs on GitHub's servers ───────────────
   build:
     name: Build & publish
     runs-on: ubuntu-latest
@@ -53,88 +60,91 @@ jobs:
       - name: Upload app
         uses: actions/upload-artifact@v4
         with:
-          name: academy-net
+          name: academy-iis
           path: publish
-          retention-days: 7
+          retention-days: 14
 
   security:
     name: Security scan (Trivy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Scan dependencies, config and secrets
-        uses: aquasecurity/trivy-action@v0.36.0   # v-prefixed tag; see README note on pinning
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: '0'          # report only; change to '1' to fail the pipeline on findings
+          exit-code: '0'          # report only; change to '1' to block deployments on findings
 
-  docker:
-    name: Docker image → GHCR
-    needs: [build, security]
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Image name (lowercase)
-        id: img
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ steps.img.outputs.name }}:latest
-            ${{ steps.img.outputs.name }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
+  # ─────────────── runs ON the Azure Windows VM ───────────────
   deploy:
-    name: Deploy to Azure Web Apps
+    name: Deploy to IIS
     needs: [build, security]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    runs-on: [self-hosted, windows, iis-prod]
     environment:
-      name: production
-      url: ${{ steps.deploy.outputs.webapp-url }}
+      name: production-vm
+    defaults:
+      run:
+        shell: powershell
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Get deploy scripts
+        uses: actions/checkout@v4
         with:
-          name: academy-net
+          sparse-checkout: deploy/iis
+
+      - name: Download app
+        uses: actions/download-artifact@v4
+        with:
+          name: academy-iis
           path: publish
 
-      - uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy
-        id: deploy
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
-          package: publish
-
-      - name: Smoke test (/health)
+      - name: Backup current release
+        id: backup
         run: |
-          url="${{ steps.deploy.outputs.webapp-url }}/health"
-          for i in $(seq 1 30); do
-            if curl -fsS "$url" | grep -q '"UP"'; then echo "✅ Healthy: $url"; exit 0; fi
-            echo "Waiting for app to start ($i/30)…"; sleep 10
-          done
-          echo "❌ Health check failed: $url"; exit 1
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path "$env:SITE_PATH\AcademyNet.dll") {
+            $dest = Join-Path $env:BACKUP_ROOT (Get-Date -Format 'yyyyMMdd-HHmmss')
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            # App code only: App_Data (database + notes) and appsettings.Production.json stay in place
+            robocopy $env:SITE_PATH $dest /E /XD App_Data logs /NFL /NDL /NJH /NJS /NP | Out-Null
+            if ($LASTEXITCODE -ge 8) { throw "Backup failed (robocopy $LASTEXITCODE)" }
+            "path=$dest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host "Backup saved to $dest"
+            # keep the 5 newest backups
+            Get-ChildItem $env:BACKUP_ROOT -Directory | Sort-Object Name -Descending | Select-Object -Skip 5 | Remove-Item -Recurse -Force
+          } else {
+            Write-Host "First deployment - nothing to back up."
+          }
+          exit 0
+
+      - name: Deploy to IIS
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\deploy\iis\2-deploy-site.ps1 -SourcePath "$env:GITHUB_WORKSPACE\publish" -SiteName $env:SITE_NAME -SitePath $env:SITE_PATH
+
+      - name: Health check
+        run: |
+          for ($i = 1; $i -le 30; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri $env:HEALTH_URL -UseBasicParsing -TimeoutSec 10
+              if ($r.StatusCode -eq 200 -and $r.Content -match 'UP') { Write-Host "Healthy: $($r.Content)"; exit 0 }
+            } catch { }
+            Write-Host "Waiting for the site to start ($i/30)..."
+            Start-Sleep -Seconds 5
+          }
+          Write-Error "Health check failed: $env:HEALTH_URL"
+          exit 1
+
+      - name: Roll back on failure
+        if: failure() && steps.backup.outputs.path != ''
+        run: |
+          Import-Module WebAdministration
+          Write-Host "Rolling back to ${{ steps.backup.outputs.path }}"
+          Stop-WebAppPool -Name $env:SITE_NAME -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 3
+          robocopy "${{ steps.backup.outputs.path }}" $env:SITE_PATH /E /NFL /NDL /NJH /NJS /NP | Out-Null
+          Start-WebAppPool -Name $env:SITE_NAME
+          Write-Host "Previous version restored."
+          exit 0

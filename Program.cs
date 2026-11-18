@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json.Nodes;
 using AcademyNet.Data;
 using AcademyNet.Services;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -57,6 +58,11 @@ builder.Services.AddScoped<CartService>();
 builder.Services.AddScoped<OrderService>();
 builder.Services.AddSingleton<FileStorage>();
 builder.Services.AddHttpContextAccessor();
+// IIS on a VM: keep the login/antiforgery encryption keys in App_Data so users stay
+// logged in after app-pool recycles, VM reboots and new deployments.
+builder.Services.AddDataProtection()
+    .SetApplicationName("iNubVisionAcademy")
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys")));
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(o =>
 {

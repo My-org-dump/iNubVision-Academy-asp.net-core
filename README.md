@@ -1,7 +1,8 @@
-# iNubVision Academy: ASP.NET Core 8
+# iNubVision Academy: ASP.NET Core 8 on IIS (Azure Windows VM)
 
-A DevOps training platform with a course store, Razorpay payments, a learning portal and an admin panel.
-**Stack:** .NET 8 · Razor Pages · ASP.NET Core Identity · EF Core · Azure SQL / SQL Server (SQLite for local runs)
+A DevOps training platform with a course store, Razorpay payments, a learning portal and an admin panel. It's hosted on **IIS on an Azure Windows VM** and deployed automatically by **GitHub Actions**.
+
+**Stack:** .NET 8 · Razor Pages · ASP.NET Core Identity · EF Core · SQLite on the VM (or Azure SQL) · IIS
 
 ## Features
 
@@ -52,177 +53,123 @@ On first start the app creates the admin account from config (`admin@inubvision.
 3. Optional: add a webhook at `https://<your-domain>/api/razorpay/webhook` for the events `payment.captured` and `order.paid`, and set the webhook secret.
 4. Test with Razorpay's test cards and UPI IDs, then switch to Live keys.
 
+## How it is hosted
+
+```
+ Developer ──git push──► GitHub ──► GitHub Actions
+                                     ├─ Build & publish (GitHub's servers)
+                                     ├─ Security scan (Trivy)
+                                     └─ Deploy job ─────────────┐ runs on the VM itself (self-hosted runner)
+                                                                ▼
+ Students ──HTTPS──► Azure Windows VM (Windows Server 2022)
+                     └─ IIS ─ site "AcademyNet" ─ C:\inetpub\AcademyNet
+                                 ├─ App_Data\academy.db        (SQLite database)
+                                 ├─ App_Data\files\            (lesson notes)
+                                 ├─ App_Data\keys\             (login encryption keys)
+                                 └─ appsettings.Production.json (admin login, Razorpay keys; never in Git)
+```
+
+## Setup (one time, about 20 minutes)
+
+Run these on **your PC** in PowerShell. You need the Azure CLI (`winget install Microsoft.AzureCLI`, then `az login`) and Git. You don't need to RDP into the VM.
+
+### 1. Put the code on GitHub
+Create a **private** repo, then push this folder:
+```powershell
+git init; git add .; git commit -m "iNubVision Academy"
+git branch -M main
+git remote add origin https://github.com/<owner>/<repo>.git
+git push -u origin main
+```
+The first run only builds; the deploy job waits until the runner exists (step 4).
+
+### 2. Create the VM (installs IIS and the .NET 8 Hosting Bundle)
+```powershell
+.\deploy\azure\create-vm.ps1 -MyIp <your-public-ip>
+```
+`-MyIp` limits Remote Desktop to your own IP, which is recommended. The script prints the VM's public IP at the end.
+
+### 3. Save the site settings on the VM
+```powershell
+.\deploy\azure\configure-vm.ps1 -AdminEmail you@inubvision.com
+# with Razorpay:   -RazorpayKeyId rzp_test_xxx   (it asks for the secret)
+# with Azure SQL:  -SqlConnection "Server=tcp:...;Database=academy;User ID=...;Password=...;Encrypt=True;"
+```
+This writes `C:\inetpub\AcademyNet\appsettings.Production.json` on the VM, readable only by Administrators and the site. **Secrets never go into GitHub.**
+
+### 4. Connect GitHub to the VM
+1. In GitHub, open **Settings → Actions → Runners → New self-hosted runner** and copy the token shown after `--token`.
+2. On your PC, run:
+```powershell
+.\deploy\azure\install-runner.ps1 -Repo <owner>/<repo>
+```
+3. In GitHub, check **Settings → Actions → Runners**: the runner should show **Idle** with the label `iis-prod`.
+
+### 5. Create the environment (optional approval gate)
+In GitHub, go to **Settings → Environments → New environment** and name it `production-vm`. Add yourself as a *required reviewer* if you want to approve every release.
+
+### 6. Deploy
+Re-run the latest workflow in the **Actions** tab, or push any commit to `main`. Then open `http://<VM-IP>`, and log in at `/Account/Login` with the admin email and password from step 3.
+
+## Every release after that
+```powershell
+git add .; git commit -m "your change"; git push
+```
+The pipeline then runs these steps:
+
+| Step | Where | What happens |
+|---|---|---|
+| Build & publish | GitHub | `dotnet build` and `dotnet publish`; the output is stored as an artifact |
+| Security scan | GitHub | Trivy scans dependencies, config and secrets (report-only; set `exit-code: '1'` to block) |
+| Approval | GitHub | Waits for you if `production-vm` has required reviewers |
+| Backup | VM | Copies the current site to `C:\inetpub\_backups\AcademyNet\<timestamp>` (keeps the last 5) |
+| Deploy | VM | `deploy\iis\2-deploy-site.ps1`: stops the app pool, copies the files, sets permissions, starts the site |
+| Health check | VM | `http://localhost/health` must answer `{"status":"UP"}` |
+| Rollback | VM | Only if the health check fails: restores the backup automatically |
+
+Pull requests only build and scan; they never deploy.
+
+## HTTPS with your domain
+1. Create a DNS **A record**, for example `academy.inubvision.com`, pointing to the VM's public IP.
+2. RDP to the VM, download **win-acme** from https://www.win-acme.com, and run `wacs.exe`.
+3. Choose *N: Create certificate (default settings)*, then pick the **AcademyNet** site. win-acme adds the HTTPS binding and renews the certificate automatically.
+4. Set your Razorpay webhook URL to `https://academy.inubvision.com/api/razorpay/webhook`.
+
+## First login and admins
+- **First admin:** the admin account is created on the site's first start from the email and password you gave `configure-vm.ps1`.
+- **More admins:** to give admin access to another email (for example your personal one), register it on the site, then go to **Admin → Students → Make admin**.
+
+## Backups and operations
+- **Database and notes:** back up `C:\inetpub\AcademyNet\App_Data`. Easiest is **Azure Backup** for the whole VM (Portal → VM → Backup).
+- **Logs:** to see startup errors, set `stdoutLogEnabled="true"` in `C:\inetpub\AcademyNet\web.config` and read `logs\stdout*.log`. Also check Event Viewer → Windows Logs → Application.
+- **Change settings:** rerun `configure-vm.ps1`. The site restarts automatically.
+- **Windows updates:** enable *Azure Update Manager* on the VM, or patch it monthly.
+
+| Problem | Fix |
+|---|---|
+| Deploy job stuck at *"Waiting for a runner"* | The runner is offline: check the **actions.runner.*** service on the VM, or rerun `install-runner.ps1` with a new token |
+| HTTP 500.19 | The Hosting Bundle is missing: rerun `deploy\iis\1-setup-iis.ps1` on the VM |
+| HTTP 500.30 | The app failed to start: enable stdout logs (above). Often a mistake in `appsettings.Production.json` |
+| Health check failed → rolled back | Read the deploy job log and the stdout log; fix and push again |
+| Site works on the VM but not from outside | Ports 80/443 in the Azure NSG (open by `create-vm.ps1`) and Windows Firewall |
+
 ## Run locally
-```bash
-dotnet run                    # SQLite database in ./App_Data
-docker compose up -d --build  # → http://localhost:8081
-```
-
-## Configuration
-`appsettings.json` (or app settings / environment variables, where `:` becomes `__`):
-
-| Setting | Purpose |
-|---|---|
-| `Database:Provider` + `ConnectionStrings:Default` | `Sqlite` (default) or `SqlServer` |
-| `Admin:Email`, `Admin:Password` | First admin account |
-| `Razorpay:KeyId`, `Razorpay:KeySecret`, `Razorpay:WebhookSecret` | Payments (empty = demo mode) |
-| `Storage:FilesPath` | Folder for lesson notes |
-| `Site:*` | Brand text, stats, webinars, technologies, trainer bio |
-
-## Deploy to Azure Web Apps (recommended)
-```bash
-az login
-export SQL_PASSWORD='Str0ng-Db-Pass!' ADMIN_PASSWORD='Str0ng-Site-Pass'
-./deploy/azure-webapp/deploy.sh             # creates Azure SQL + Web App (.NET 8, Linux) and deploys
-./deploy/azure-webapp/deploy.sh --app-only  # later manual releases
-```
-The script sets up:
-- **Database:** Azure SQL Database (Basic), reachable from Azure services only
-- **Web App:** Linux, .NET 8, Always On, HTTPS only, TLS 1.2+, health check `/health`
-- **Settings:** database connection, admin login and Razorpay keys as app settings
-- **Notes storage:** `/home/data/files`, which App Service keeps across restarts
-
-Edit the names at the top of the script first (the app and SQL server names must be globally unique).
-
-## Deploy to IIS on a Windows VM (alternative)
 ```powershell
-dotnet publish -c Release -o publish
-.\deploy\iis\1-setup-iis.ps1                                # once: IIS + .NET 8 Hosting Bundle
-.\deploy\iis\2-deploy-site.ps1 -SourcePath C:\temp\publish  # each release
+dotnet run          # SQLite database in .\App_Data, admin from appsettings.json
 ```
-Put secrets in `C:\inetpub\AcademyNet\appsettings.Production.json`. Redeploys keep that file and `App_Data`.
-
-## Deploy to IIS with GitHub Actions
-
-The workflow is `.github/workflows/deploy-iis-vm.yml`:
-
-```
-GitHub (ubuntu runner)                     Your Azure Windows VM (self-hosted runner)
-──────────────────────                     ──────────────────────────────────────────
-Build & publish ─┐
-Security scan  ──┴──► artifact ──────────► Backup current site → deploy-site.ps1 → health check
-                                                      └── if the health check fails → automatic rollback
-```
-
-The runner on the VM makes an **outbound** connection to GitHub. You don't open any new ports, and no VM password is stored in GitHub.
-
-### One-time setup
-
-**1. Prepare IIS on the VM** (RDP, PowerShell as Administrator):
-```powershell
-.\deploy\iis\1-setup-iis.ps1
-```
-
-**2. Create the settings file** `C:\inetpub\AcademyNet\appsettings.Production.json` on the VM:
-```json
-{
-  "Admin": { "Email": "you@inubvision.com", "Password": "Your-Strong-Pass1" },
-  "Razorpay": { "KeyId": "", "KeySecret": "", "WebhookSecret": "" }
-}
-```
-To use Azure SQL instead of SQLite, also add `"Database": { "Provider": "SqlServer" }` and `"ConnectionStrings": { "Default": "..." }`.
-
-**3. Install the GitHub runner on the VM:**
-1. In GitHub, open the repo → **Settings → Actions → Runners → New self-hosted runner → Windows x64**.
-2. On the VM (PowerShell as Administrator), run the **download** commands GitHub shows, then configure the runner like this:
-```powershell
-mkdir C:\actions-runner; cd C:\actions-runner
-# ... the download + extract commands from the GitHub page ...
-.\config.cmd --url https://github.com/<owner>/<repo> --token <TOKEN-FROM-GITHUB> `
-  --name vm-academy --labels iis-prod --work _work `
-  --runasservice --windowslogonaccount "NT AUTHORITY\SYSTEM"
-```
-3. Check that the runner shows **Idle** under *Settings → Actions → Runners*.
-
-The runner runs as the local SYSTEM account because managing IIS (creating app pools and setting folder permissions) needs admin rights.
-
-**4. Create the environment:** in GitHub, go to **Settings → Environments → New environment** and name it `production-vm`. Add yourself as a *required reviewer* if you want to approve each deployment.
-
-**5. Push to `main`.** The run builds, scans, waits for your approval (if set), deploys, checks `http://localhost/health` on the VM, and rolls back automatically if the new version doesn't come up.
-
-### Good to know
-- **Kept across deploys:** `App_Data` (database and lesson notes) and `appsettings.Production.json`. The workflow never touches them.
-- **Backups:** the last 5 releases are kept in `C:\inetpub\_backups\AcademyNet`. To roll back by hand, copy one back and run `iisreset`.
-- **Which workflow to use:** this repo also has `ci-cd.yml`, which deploys to Azure **Web Apps**. If you only use the VM, delete `ci-cd.yml`; otherwise its deploy job fails on every push because the Azure secrets aren't set.
-- **Security:** a self-hosted runner executes the workflow code from your repo, so keep the repo **private**, or allow only trusted collaborators to push to `main`.
-
-## CI/CD with GitHub Actions
-
-The pipeline is in `.github/workflows/ci-cd.yml`:
-
-```
-Pull request ──► Build & test ──┐
-                Security scan ──┴──► (stops here for PRs)
-
-Push to main ──► Build & test ──┐
-                Security scan ──┼──► Docker image → ghcr.io/<owner>/<repo>:latest + :<commit>
-                                └──► Deploy to Azure Web Apps ──► Smoke test (health endpoint)
-```
-
-| Job | What it does |
-|---|---|
-| **Build & test** | Compiles, runs tests and uploads the app as a pipeline artifact |
-| **Security scan** | Trivy scans dependencies, Dockerfile and config for HIGH/CRITICAL issues and leaked secrets (report-only; set `exit-code: '1'` to block) |
-| **Docker image** | Builds the Dockerfile and pushes to GitHub Container Registry, ready for AKS later |
-| **Deploy** | Logs in to Azure with **OIDC** (no stored passwords) and deploys the same artifact that was tested |
-| **Smoke test** | Calls the health URL until the new version answers "UP"; fails the run if it doesn't |
-
-### One-time setup
-
-**1. Create the Azure resources** (once): run `./deploy/azure-webapp/deploy.sh` (see the deployment section).
-
-**2. Let GitHub deploy to Azure without a password (OIDC).** Run in Azure Cloud Shell, with your own values:
-```bash
-RG=rg-inubvision-academy-net ; APP=inubvision-academy-net ; REPO=<github-user>/<repo-name>
-
-APP_ID=$(az ad app create --display-name "gh-$APP" --query appId -o tsv)
-az ad sp create --id $APP_ID -o none
-az role assignment create --assignee $APP_ID --role "Website Contributor" \
-  --scope $(az webapp show -g $RG -n $APP --query id -o tsv) -o none
-az ad app federated-credential create --id $APP_ID --parameters "{
-  \"name\": \"github-production\",
-  \"issuer\": \"https://token.actions.githubusercontent.com\",
-  \"subject\": \"repo:$REPO:environment:production\",
-  \"audiences\": [\"api://AzureADTokenExchange\"] }"
-
-echo "AZURE_CLIENT_ID=$APP_ID"
-echo "AZURE_TENANT_ID=$(az account show --query tenantId -o tsv)"
-echo "AZURE_SUBSCRIPTION_ID=$(az account show --query id -o tsv)"
-```
-
-**3. Add them to the GitHub repo:** *Settings → Secrets and variables → Actions*.
-- **Secrets:** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
-- **Variables:** `AZURE_WEBAPP_NAME` = `inubvision-academy-net`
-- **Environments:** create `production`. Optionally add yourself as a *required reviewer*, so every deployment waits for your approval.
-
-Or with the GitHub CLI:
-```bash
-gh secret set AZURE_CLIENT_ID --body "<value>"
-gh secret set AZURE_TENANT_ID --body "<value>"
-gh secret set AZURE_SUBSCRIPTION_ID --body "<value>"
-gh variable set AZURE_WEBAPP_NAME --body "inubvision-academy-net"
-```
-
-**4. Push to `main`** and watch the run in the **Actions** tab.
-
-> The OIDC "subject" must match exactly: `repo:<owner>/<repo>:environment:production`. If the deploy step says *"No matching federated identity record"*, check the repo name and the environment name.
-
 
 ## Project structure
 ```
-├── .github/workflows/
-│   ├── ci-cd.yml                # CI/CD → Azure Web Apps
-│   └── deploy-iis-vm.yml        # CI/CD → IIS on an Azure Windows VM (self-hosted runner)
+├── .github/workflows/ci-cd.yml   # build → scan → deploy to IIS on the VM → health check → rollback
 ├── deploy/
-│   ├── azure-webapp/deploy.sh   # Azure Web Apps + Azure SQL
-│   └── iis/                     # IIS on a Windows VM
-├── Dockerfile · docker-compose.yml · web.config
-├── AcademyNet.csproj
-├── Program.cs                   # setup, /health, file downloads, Razorpay webhook
-├── Data/                        # EF Core entities, DbContext, seed data
-├── Services/                    # cart & coupons, Razorpay, orders, files, helpers
-├── Pages/                       # Razor Pages: public, Account, Courses, Cart, Checkout, Learn, Admin
-└── wwwroot/                     # css, js
+│   ├── azure/
+│   │   ├── create-vm.ps1         # VM + ports + IIS + Hosting Bundle (from your PC)
+│   │   ├── configure-vm.ps1      # writes appsettings.Production.json on the VM
+│   │   └── install-runner.ps1    # GitHub self-hosted runner on the VM
+│   └── iis/
+│       ├── 1-setup-iis.ps1       # IIS + .NET 8 Hosting Bundle (used by create-vm.ps1)
+│       └── 2-deploy-site.ps1     # app pool + site + copy + permissions (used by the pipeline)
+├── web.config                    # IIS: ASP.NET Core Module, in-process, 100 MB uploads
+├── AcademyNet.csproj · Program.cs · appsettings.json
+├── Data/ · Services/ · Pages/ · wwwroot/
 ```
-
-> This code wasn't compiled where it was written. Run `dotnet build` once locally and fix anything it reports before your first push.

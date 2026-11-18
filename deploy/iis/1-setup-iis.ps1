@@ -4,7 +4,6 @@
 $ErrorActionPreference = "Stop"
 
 Write-Host "Installing IIS..." -ForegroundColor Cyan
-# Web-WebSockets is needed for the live class chat (SignalR)
 Install-WindowsFeature -Name Web-Server, Web-WebSockets, Web-Mgmt-Console, Web-Mgmt-Service -IncludeManagementTools
 
 Write-Host "Downloading ASP.NET Core 8 Hosting Bundle..." -ForegroundColor Cyan

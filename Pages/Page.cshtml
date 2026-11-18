@@ -3,7 +3,7 @@
     var slug = (RouteData.Values["slug"]?.ToString() ?? "").ToLowerInvariant();
     var site = SiteOpts.Value;
     var title = slug switch { "terms" => "Terms of use", "privacy" => "Privacy policy", "refund" => "Refund policy", _ => "" };
-    if (title == "") { Context.Response.StatusCode = 404; }
+    if (title == "") { HttpContext.Response.StatusCode = 404; }
     ViewData["Title"] = title == "" ? "Not found" : title;
 }
 <section class="page-head left"><div class="wrap"><span class="eyebrow">@site.Name</span><h1>@(title == "" ? "Page not found" : title)</h1><p class="muted small">Template text: review with a legal advisor before going live.</p></div></section>
