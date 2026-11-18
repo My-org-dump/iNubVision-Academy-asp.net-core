@@ -1,17 +1,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  iNubVision Academy (ASP.NET Core 8) — CI/CD → IIS on an Azure Windows VM
+#  iNubVision Academy (ASP.NET Core 8) — CI/CD
 #
-#  Pull request → build + security scan
-#  Push to main → build + scan → (approval, optional) → deploy to IIS on the VM
-#                 → health check → automatic rollback if the new version fails
+#  Runs on YOUR Windows self-hosted runner. Deploys to a SEPARATE Azure Windows VM:
 #
-#  One-time setup (see README):
-#    deploy/azure/create-vm.ps1       → VM + IIS + .NET 8 Hosting Bundle
-#    deploy/azure/configure-vm.ps1    → admin login + Razorpay keys on the VM
-#    deploy/azure/install-runner.ps1  → GitHub self-hosted runner on the VM (label: iis-prod)
-#    GitHub → Settings → Environments → "production-vm" (optional required reviewers)
+#   self-hosted runner                         Azure                         target VM (IIS)
+#   ──────────────────                         ─────                         ───────────────
+#   build + publish + zip
+#   security scan (Trivy)
+#   az login (OIDC) ──► upload zip ──► Blob Storage (private, 2-hour read link)
+#                   ──► Azure Run Command ─────────────────────────────────► remote-deploy.ps1:
+#                                                                            enable IIS + .NET 8 (if missing)
+#                                                                            settings → backup → deploy
+#                                                                            health check → rollback on failure
+#
+#  No ports opened on the VM, no VM password in GitHub, nothing installed on the VM except IIS + .NET.
+#
+#  Runner requirements: Windows, labels  self-hosted + windows, Azure CLI installed (az), internet access.
+#  One-time Azure + GitHub setup: deploy/azure/setup-cicd.ps1 (prints every secret/variable to add).
 # ─────────────────────────────────────────────────────────────────────────────
-name: CI/CD (IIS on Azure VM)
+name: CI/CD (Azure Windows VM)
 
 on:
   push:
@@ -24,23 +31,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-iis-vm
+  group: deploy-azure-vm
   cancel-in-progress: false      # never cancel a deployment half-way
 
 env:
   DOTNET_VERSION: '8.0.x'
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  TRIVY_VERSION: '0.74.0'
   SITE_NAME: AcademyNet
   SITE_PATH: C:\inetpub\AcademyNet
-  BACKUP_ROOT: C:\inetpub\_backups\AcademyNet
-  HEALTH_URL: http://localhost/health
 
 jobs:
-  # ─────────────── runs on GitHub's servers ───────────────
   build:
     name: Build & publish
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, windows]
+    defaults:
+      run:
+        shell: powershell
     steps:
       - uses: actions/checkout@v4
 
@@ -54,97 +62,166 @@ jobs:
       - name: Build
         run: dotnet build AcademyNet.csproj -c Release --no-restore
 
-      - name: Publish
-        run: dotnet publish AcademyNet.csproj -c Release --no-build -o publish
+      - name: Publish and zip
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path publish) { Remove-Item publish -Recurse -Force }
+          if (Test-Path package) { Remove-Item package -Recurse -Force }
+          dotnet publish AcademyNet.csproj -c Release --no-build -o publish
+          if ($LASTEXITCODE -ne 0) { throw "publish failed" }
+          New-Item -ItemType Directory package | Out-Null
+          Compress-Archive -Path publish\* -DestinationPath package\academy.zip
+          Write-Host ("Package: {0:N1} MB" -f ((Get-Item package\academy.zip).Length / 1MB))
 
-      - name: Upload app
+      - name: Upload package
         uses: actions/upload-artifact@v4
         with:
-          name: academy-iis
-          path: publish
+          name: academy-package
+          path: package/academy.zip
           retention-days: 14
 
   security:
     name: Security scan (Trivy)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: fs
-          scanners: vuln,secret,misconfig
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: '0'          # report only; change to '1' to block deployments on findings
-
-  # ─────────────── runs ON the Azure Windows VM ───────────────
-  deploy:
-    name: Deploy to IIS
-    needs: [build, security]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, windows, iis-prod]
-    environment:
-      name: production-vm
+    runs-on: [self-hosted, windows]
     defaults:
       run:
         shell: powershell
     steps:
-      - name: Get deploy scripts
+      - uses: actions/checkout@v4
+
+      - name: Trivy scan (dependencies, config, secrets)
+        continue-on-error: true      # a scanner download problem never blocks a release
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $dir = Join-Path $env:RUNNER_TOOL_CACHE "trivy\$env:TRIVY_VERSION"
+          $exe = Join-Path $dir 'trivy.exe'
+          if (-not (Test-Path $exe)) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $url = "https://github.com/aquasecurity/trivy/releases/download/v$env:TRIVY_VERSION/trivy_$($env:TRIVY_VERSION)_windows-64bit.zip"
+            Invoke-WebRequest -Uri $url -OutFile "$dir\trivy.zip" -UseBasicParsing
+            Expand-Archive "$dir\trivy.zip" -DestinationPath $dir -Force
+          }
+          # report only: change --exit-code 0 to 1 to block deployments on findings
+          & $exe fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 .
+
+  deploy:
+    name: Deploy to Azure Windows VM
+    needs: [build, security]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, windows]
+    environment:
+      name: production-vm
+      url: ${{ vars.SITE_URL }}
+    permissions:
+      contents: read
+      id-token: write            # OIDC login to Azure
+    defaults:
+      run:
+        shell: powershell
+    env:
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      VM: ${{ vars.AZURE_VM_NAME }}
+      STORAGE: ${{ vars.AZURE_STORAGE_ACCOUNT }}
+      CONTAINER: deployments
+      BLOB: academy-${{ github.run_id }}-${{ github.run_attempt }}.zip
+      RUN_NAME: deploy-academy-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Get deploy script
         uses: actions/checkout@v4
         with:
-          sparse-checkout: deploy/iis
+          sparse-checkout: deploy/azure
 
-      - name: Download app
+      - name: Download package
         uses: actions/download-artifact@v4
         with:
-          name: academy-iis
-          path: publish
+          name: academy-package
+          path: package
 
-      - name: Backup current release
-        id: backup
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Upload package to Blob Storage
         run: |
           $ErrorActionPreference = 'Stop'
-          if (Test-Path "$env:SITE_PATH\AcademyNet.dll") {
-            $dest = Join-Path $env:BACKUP_ROOT (Get-Date -Format 'yyyyMMdd-HHmmss')
-            New-Item -ItemType Directory -Force -Path $dest | Out-Null
-            # App code only: App_Data (database + notes) and appsettings.Production.json stay in place
-            robocopy $env:SITE_PATH $dest /E /XD App_Data logs /NFL /NDL /NJH /NJS /NP | Out-Null
-            if ($LASTEXITCODE -ge 8) { throw "Backup failed (robocopy $LASTEXITCODE)" }
-            "path=$dest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host "Backup saved to $dest"
-            # keep the 5 newest backups
-            Get-ChildItem $env:BACKUP_ROOT -Directory | Sort-Object Name -Descending | Select-Object -Skip 5 | Remove-Item -Recurse -Force
-          } else {
-            Write-Host "First deployment - nothing to back up."
+          az storage blob upload --auth-mode login --account-name $env:STORAGE -c $env:CONTAINER -n $env:BLOB -f package\academy.zip --overwrite --only-show-errors -o none
+          if ($LASTEXITCODE -ne 0) { throw "Upload failed" }
+          $expiry = (Get-Date).ToUniversalTime().AddHours(2).ToString('yyyy-MM-ddTHH:mmZ')
+          $sas = az storage blob generate-sas --auth-mode login --as-user --account-name $env:STORAGE -c $env:CONTAINER -n $env:BLOB --permissions r --expiry $expiry --https-only --full-uri -o tsv
+          if ($LASTEXITCODE -ne 0 -or -not $sas) { throw "Could not create the download link" }
+          $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($sas.Trim()))
+          Write-Host "::add-mask::$b64"
+          "PACKAGE_B64=$b64" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Uploaded $env:BLOB (read link valid 2 hours)"
+
+      - name: Deploy on the VM (Azure Run Command)
+        env:
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+          SQL_CONNECTION: ${{ secrets.SQL_CONNECTION }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # Site settings from environment secrets (skipped when ADMIN_EMAIL is empty → the VM keeps its current file)
+          $settingsB64 = ''
+          if ($env:ADMIN_EMAIL) {
+            $s = [ordered]@{
+              Admin    = [ordered]@{ Email = $env:ADMIN_EMAIL; Password = $env:ADMIN_PASSWORD }
+              Razorpay = [ordered]@{ KeyId = $env:RAZORPAY_KEY_ID; KeySecret = $env:RAZORPAY_KEY_SECRET; WebhookSecret = $env:RAZORPAY_WEBHOOK_SECRET }
+            }
+            if ($env:SQL_CONNECTION) { $s.Database = @{ Provider = 'SqlServer' }; $s.ConnectionStrings = @{ Default = $env:SQL_CONNECTION } }
+            $settingsB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($s | ConvertTo-Json -Depth 5)))
+            Write-Host "::add-mask::$settingsB64"
           }
-          exit 0
 
-      - name: Deploy to IIS
-        run: |
-          $ErrorActionPreference = 'Stop'
-          & .\deploy\iis\2-deploy-site.ps1 -SourcePath "$env:GITHUB_WORKSPACE\publish" -SiteName $env:SITE_NAME -SitePath $env:SITE_PATH
+          # Everything is base64, so no characters get mangled by az.cmd on Windows.
+          # Secrets go in --protected-parameters (encrypted, never shown in the VM's run-command history).
+          $azArgs = @(
+            'vm','run-command','create',
+            '-g', $env:RG, '--vm-name', $env:VM, '--name', $env:RUN_NAME,
+            '--script', '@deploy\azure\remote-deploy.ps1',
+            '--parameters', "SiteName=$env:SITE_NAME", "SitePath=$env:SITE_PATH",
+            '--protected-parameters', "PackageB64=$env:PACKAGE_B64"
+          )
+          if ($settingsB64) { $azArgs += "SettingsB64=$settingsB64" }
+          $azArgs += @('--timeout-in-seconds', '3600', '--async-execution', 'false', '--only-show-errors', '-o', 'none')
 
-      - name: Health check
+          Write-Host "Running remote-deploy.ps1 on $env:VM (enable IIS → deploy → health check) ..."
+          & az @azArgs
+          $createExit = $LASTEXITCODE
+
+          $view = az vm run-command show -g $env:RG --vm-name $env:VM --name $env:RUN_NAME --instance-view `
+                    --query "instanceView.{state:executionState, exitCode:exitCode, output:output, error:error}" -o json | ConvertFrom-Json
+          Write-Host "──────── output from the VM ────────"
+          Write-Host $view.output
+          if ($view.error) { Write-Host "──────── errors ────────"; Write-Host $view.error }
+          Write-Host "State: $($view.state), exit code: $($view.exitCode)"
+
+          if ($createExit -ne 0 -or $view.state -ne 'Succeeded' -or $view.exitCode -ne 0) {
+            throw "Deployment failed on the VM (see output above). If the health check failed, the previous version was restored."
+          }
+
+      - name: Check the site from outside
+        if: ${{ vars.SITE_URL != '' }}
         run: |
-          for ($i = 1; $i -le 30; $i++) {
-            try {
-              $r = Invoke-WebRequest -Uri $env:HEALTH_URL -UseBasicParsing -TimeoutSec 10
-              if ($r.StatusCode -eq 200 -and $r.Content -match 'UP') { Write-Host "Healthy: $($r.Content)"; exit 0 }
-            } catch { }
-            Write-Host "Waiting for the site to start ($i/30)..."
+          $url = "${{ vars.SITE_URL }}".TrimEnd('/') + '/health'
+          for ($i = 1; $i -le 12; $i++) {
+            try { $r = Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 10; if ($r.Content -match 'UP') { Write-Host "Public check OK: $url"; exit 0 } } catch { }
             Start-Sleep -Seconds 5
           }
-          Write-Error "Health check failed: $env:HEALTH_URL"
-          exit 1
+          Write-Warning "Could not reach $url from the runner (check DNS / NSG ports 80-443). The VM-side health check already passed."
+          exit 0
 
-      - name: Roll back on failure
-        if: failure() && steps.backup.outputs.path != ''
+      - name: Clean up
+        if: always()
         run: |
-          Import-Module WebAdministration
-          Write-Host "Rolling back to ${{ steps.backup.outputs.path }}"
-          Stop-WebAppPool -Name $env:SITE_NAME -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 3
-          robocopy "${{ steps.backup.outputs.path }}" $env:SITE_PATH /E /NFL /NDL /NJH /NJS /NP | Out-Null
-          Start-WebAppPool -Name $env:SITE_NAME
-          Write-Host "Previous version restored."
+          az vm run-command delete -g $env:RG --vm-name $env:VM --name $env:RUN_NAME --yes --only-show-errors 2>$null
+          az storage blob delete --auth-mode login --account-name $env:STORAGE -c $env:CONTAINER -n $env:BLOB --only-show-errors 2>$null
           exit 0
